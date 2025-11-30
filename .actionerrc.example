@@ -1,0 +1,32 @@
+# Notion AX Extractor Configuration Example
+# Copy this file to .actionerrc and customize
+
+# Notion API Settings
+notion_token=your_notion_api_token_here
+
+# Output Settings
+output_dir=output
+output_format=json  # json, csv, or both
+
+# Extraction Settings
+use_ocr=true
+ocr_engine=vision  # vision or tesseract
+scroll_delay=0.3
+max_scrolls=100
+
+# Navigation Settings
+page_load_timeout=10.0
+navigation_timeout=10.0
+
+# Logging Settings
+log_level=INFO  # DEBUG, INFO, WARNING, ERROR
+log_to_file=true
+log_to_console=true
+
+# Validation Settings
+similarity_threshold=0.8
+
+# Performance Settings
+cache_ax_tree=false
+parallel_ocr=false
+

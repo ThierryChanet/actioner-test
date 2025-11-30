@@ -4,27 +4,437 @@ A macOS tool that extracts text content from the Notion desktop app using **dire
 
 ## Features
 
-- Direct AX-based text extraction  
-- Programmatic navigation between Notion pages  
-- Deterministic scrolling and full-page traversal  
-- OCR fallback for inaccessible elements  
-- Notion API “gold standard” comparison for testing  
-- Normal, dry-run, and debug modes
+- **Direct AX-based text extraction** - Uses macOS Accessibility APIs for reliable content capture
+- **Database extraction** - Extract content from multiple pages in a Notion database (e.g., Recipe database)
+- **Programmatic navigation** - Navigate between Notion pages without mouse simulation
+- **Deterministic scrolling** - Full-page traversal with consistent results across runs
+- **OCR fallback** - macOS Vision API and Tesseract for inaccessible elements
+- **Notion API validation** - Compare extracted content with API "gold standard"
+- **Multiple modes** - Normal, dry-run, and debug modes
+- **Flexible output** - JSON and CSV exports with comprehensive logging
+
+## Requirements
+
+- macOS 10.15 or later
+- Python 3.10 or later
+- Notion desktop app
+- Accessibility permissions enabled
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd actioner-test
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+Or install in development mode:
+```bash
+pip install -e .
+```
+
+3. **Enable Accessibility Permissions:**
+   - Go to **System Preferences** > **Security & Privacy** > **Privacy** > **Accessibility**
+   - Add your terminal application or Python to the list
+   - Grant permission
+
+## Quick Start
+
+### Extract a Single Page
+
+```bash
+python -m src.cli extract "Project Roadmap"
+```
+
+### Extract All Pages
+
+```bash
+python -m src.cli extract-all --output both
+```
+
+### List Available Pages
+
+```bash
+python -m src.cli list-pages
+```
+
+### Validate Against API
+
+```bash
+export NOTION_TOKEN="your_notion_api_token"
+python -m src.cli validate "Project Roadmap" --page-id "your-page-id"
+```
+
+### Extract from Database
+
+```bash
+export NOTION_TOKEN="your_notion_api_token"
+python -m src.cli extract-database "your-database-id" --limit 10
+```
+
+**📖 For detailed database extraction guide, see [DATABASE_EXTRACTION.md](DATABASE_EXTRACTION.md)**
+
+## Usage
+
+### Commands
+
+#### `extract <page_name>`
+
+Extract content from a single page.
+
+**Options:**
+- `--mode [normal|dry-run|debug]` - Execution mode (default: normal)
+- `--output [json|csv|both]` - Output format (default: json)
+- `--no-ocr` - Disable OCR fallback
+
+**Examples:**
+```bash
+# Extract with JSON output
+python -m src.cli extract "Meeting Notes"
+
+# Extract with CSV output
+python -m src.cli extract "Sprint Planning" --output csv
+
+# Dry-run mode (no actual extraction)
+python -m src.cli extract "Roadmap" --mode dry-run
+
+# Disable OCR
+python -m src.cli extract "Simple Page" --no-ocr
+```
+
+#### `extract-all`
+
+Extract content from all pages in the sidebar.
+
+**Options:**
+- `--mode [normal|dry-run|debug]` - Execution mode
+- `--output [json|csv|both]` - Output format
+- `--no-ocr` - Disable OCR fallback
+
+**Example:**
+```bash
+python -m src.cli extract-all --output both
+```
+
+#### `navigate <page_name>`
+
+Navigate to a page without extracting content.
+
+**Example:**
+```bash
+python -m src.cli navigate "Weekly Report"
+```
+
+#### `validate <page_name>`
+
+Compare extracted content with Notion API baseline.
+
+**Options:**
+- `--notion-token TOKEN` - Notion API token (or set NOTION_TOKEN env var)
+- `--page-id ID` - Notion page ID (optional, will search by name if not provided)
+- `--output [json|csv|both]` - Output format
+
+**Example:**
+```bash
+export NOTION_TOKEN="secret_ABC123..."
+python -m src.cli validate "Project Roadmap" --page-id "abc-123-def"
+```
+
+#### `extract-database <database_id>`
+
+Extract content from the first N pages of a Notion database.
+
+**Options:**
+- `--notion-token TOKEN` - Notion API token (or set NOTION_TOKEN env var)
+- `--limit N` - Number of pages to extract (default: 10)
+- `--output [json|csv|both]` - Output format (default: json)
+
+**Examples:**
+```bash
+# Extract first 10 pages from a Recipe database
+export NOTION_TOKEN="secret_ABC123..."
+python -m src.cli extract-database "abc123def456" --limit 10
+
+# Extract 20 pages with both JSON and CSV output
+python -m src.cli extract-database "abc123def456" --limit 20 --output both
+
+# With verbose logging
+python -m src.cli --verbose extract-database "abc123def456"
+```
+
+**See [DATABASE_EXTRACTION.md](DATABASE_EXTRACTION.md) for complete guide.**
+
+#### `list-pages`
+
+List all pages visible in the Notion sidebar.
+
+**Example:**
+```bash
+python -m src.cli list-pages
+```
+
+### Global Options
+
+- `--verbose` - Enable verbose debug logging
+- `--output-dir PATH` - Set output directory (default: `output`)
+
+**Example:**
+```bash
+python -m src.cli --verbose --output-dir results extract "My Page"
+```
 
 ## Output
 
-- JSON and CSV exports  
-- Diff reports comparing AX/OCR output to API baseline  
-- Optional debug visuals (bounding boxes, screenshots)
+### JSON Output
 
-## Purpose
+Extraction results are saved as JSON files with the following structure:
 
-Provides a reliable, repeatable way to extract structured content from the Notion desktop app, with accuracy validated against the Notion API.
+```json
+{
+  "page_id": null,
+  "title": "Project Roadmap",
+  "blocks": [
+    {
+      "type": "heading",
+      "content": "Q1 Goals",
+      "source": "ax",
+      "order": 0,
+      "metadata": {
+        "role": "AXHeading"
+      }
+    },
+    {
+      "type": "text",
+      "content": "Complete feature X",
+      "source": "ax",
+      "order": 1,
+      "metadata": {
+        "role": "AXStaticText"
+      }
+    }
+  ],
+  "metadata": {
+    "block_count": 2,
+    "scroll_count": 5
+  }
+}
+```
 
-## Status
+### CSV Output
 
-Work in progress. See the included PRD for project intent.
+Extraction results are also available as CSV:
+
+| Order | Type    | Content              | Source | Role          |
+|-------|---------|----------------------|--------|---------------|
+| 0     | heading | Q1 Goals             | ax     | AXHeading     |
+| 1     | text    | Complete feature X   | ax     | AXStaticText  |
+
+### Logs
+
+Comprehensive logs are saved to `output/logs/` with:
+- Navigation actions
+- Scroll cycles
+- OCR fallback decisions
+- Error recovery attempts
+- Performance metrics
+
+## Validation & Testing
+
+### Compare with Notion API
+
+The tool can fetch the "gold standard" content from the Notion API and compare it with the extracted content:
+
+```bash
+export NOTION_TOKEN="your_token"
+python -m src.cli validate "My Page"
+```
+
+This generates a detailed comparison report:
+
+```
+================================================================================
+EXTRACTION COMPARISON REPORT
+================================================================================
+
+Page: "Project Roadmap"
+Gold Standard Source: api
+Extracted Source: AX + OCR
+
+SUMMARY
+--------------------------------------------------------------------------------
+Overall Accuracy: 94.2%
+Block Match Rate: 92.0%
+Text Similarity: 97.5%
+
+Gold Blocks: 25
+Extracted Blocks: 24
+Matched Blocks: 23
+Missing Blocks: 2
+Extra Blocks: 1
+Text Mismatches: 3
+```
+
+### Running Tests
+
+Run the test suite:
+
+```bash
+pytest
+```
+
+Run with coverage:
+
+```bash
+pytest --cov=src --cov-report=html
+```
+
+## Architecture
+
+```
+src/
+├── ax/                    # Accessibility layer
+│   ├── client.py          # AX API wrapper
+│   ├── element.py         # AX element abstraction
+│   └── utils.py           # Helper functions
+├── notion/                # Notion-specific logic
+│   ├── detector.py        # App detection & state
+│   ├── navigator.py       # Page navigation
+│   └── extractor.py       # Content extraction
+├── ocr/                   # OCR fallback
+│   ├── vision.py          # macOS Vision API
+│   └── fallback.py        # Tesseract fallback
+├── validation/            # Testing framework
+│   ├── notion_api.py      # API client
+│   ├── comparator.py      # Content comparison
+│   └── differ.py          # Diff generation
+├── output/                # Export handlers
+│   ├── json_writer.py
+│   ├── csv_writer.py
+│   └── logger.py
+├── cli.py                 # CLI interface
+├── errors.py              # Error handling
+└── main.py                # Entry point
+```
+
+## How It Works
+
+### 1. Detection
+- Finds Notion.app process using macOS workspace APIs
+- Activates application and gets AX element tree
+- Waits for page to load (checks for spinners, title changes)
+
+### 2. Navigation
+- Locates sidebar pages via AX tree traversal
+- Invokes AX "Press" action on page links (no mouse simulation)
+- Confirms navigation by detecting title changes
+- Supports back/forward navigation and in-page links
+
+### 3. Extraction
+- Finds main scrollable content area via AX roles
+- Extracts text from AX elements (AXValue, AXTitle attributes)
+- Scrolls programmatically using AX scroll actions
+- Tracks seen content to avoid duplicates
+- Maintains document order consistently
+
+### 4. OCR Fallback
+- Identifies elements without accessible text
+- Captures screenshots of element bounding boxes
+- Uses macOS Vision API for text recognition
+- Falls back to Tesseract if Vision unavailable
+- Marks blocks with source ("ax" or "ocr")
+
+### 5. Validation
+- Fetches content via Notion API
+- Normalizes both sources to common format
+- Fuzzy-matches blocks by content similarity
+- Identifies missing, extra, and mismatched blocks
+- Generates accuracy metrics and diff reports
+
+## Troubleshooting
+
+### "Accessibility permissions not granted"
+
+Enable accessibility permissions:
+1. Open **System Preferences** > **Security & Privacy** > **Privacy**
+2. Select **Accessibility** from the list
+3. Click the lock to make changes
+4. Add your terminal or Python to the list
+5. Restart your terminal
+
+### "Notion app not found"
+
+Make sure Notion desktop app is running before executing commands.
+
+### Extraction returns empty or incomplete results
+
+- Ensure the Notion page has fully loaded
+- Try increasing timeouts (modify source if needed)
+- Check logs for specific errors
+- Verify Notion app version compatibility
+
+### Navigation fails
+
+- Ensure sidebar is visible (toggle with Cmd+\)
+- Check that page name matches exactly (case-insensitive)
+- Try using `list-pages` to see available pages
+- Some nested pages may not be accessible via sidebar
+
+### OCR not working
+
+- macOS Vision API requires macOS 10.15+
+- Install Tesseract as fallback: `brew install tesseract`
+- Check logs to see which OCR engine is active
+
+## Performance
+
+- **Single page extraction:** 2-10 seconds (depending on length)
+- **Navigation:** 1-2 seconds per page
+- **OCR:** Adds 0.5-2 seconds per inaccessible element
+- **API validation:** 2-5 seconds per page
+
+## Limitations
+
+- Requires Notion desktop app (does not work with web version)
+- Limited to visible text content (no images, embeds, or attachments)
+- Electron app structure can change between Notion versions
+- Some complex page layouts may not extract perfectly
+- Rapid navigation can cause stability issues
+
+## Future Enhancements
+
+- Support for extracting databases and tables
+- Image and embed metadata capture
+- Parallel page extraction
+- Incremental updates (only extract changed pages)
+- Integration with other note-taking apps
 
 ## License
 
-MIT License
+MIT License - see LICENSE file for details
+
+## Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Submit a pull request
+
+## Support
+
+For issues, questions, or feature requests, please open an issue on GitHub.
+
+## Acknowledgments
+
+- Built with PyObjC for macOS Accessibility API access
+- Uses notion-client for API validation
+- Inspired by the need for reliable, deterministic content extraction
+
+---
+
+**Note:** This tool is for personal use and automation. Respect Notion's Terms of Service and rate limits when using the API validation features.
