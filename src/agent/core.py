@@ -182,7 +182,7 @@ class NotionAgent:
         model: Optional[str] = None,
         temperature: float = 0,
         verbose: bool = False,
-        computer_use: bool = False,
+        computer_use: bool = True,
         display_num: int = 1,
     ):
         """Initialize the Notion agent.
@@ -193,7 +193,7 @@ class NotionAgent:
             model: Specific model to use (auto-selects if None)
             temperature: LLM temperature (0 = deterministic)
             verbose: Enable verbose logging
-            computer_use: Enable Computer Use API for screen control
+            computer_use: Enable Computer Use API for screen control (default: True)
             display_num: Display number for Computer Use (1-based)
         """
         self.verbose = verbose
@@ -427,7 +427,7 @@ def create_agent(
     notion_token: Optional[str] = None,
     output_dir: str = "output",
     verbose: bool = False,
-    computer_use: bool = False,
+    computer_use: bool = True,
     display_num: int = 1,
 ) -> NotionAgent:
     """Create a Notion agent instance.
@@ -437,7 +437,7 @@ def create_agent(
         notion_token: Optional Notion API token
         output_dir: Output directory
         verbose: Enable verbose logging
-        computer_use: Enable Computer Use API for screen control
+        computer_use: Enable Computer Use API for screen control (default: True)
         display_num: Display number for Computer Use (1-based)
         
     Returns:

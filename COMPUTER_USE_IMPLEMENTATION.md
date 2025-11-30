@@ -157,32 +157,44 @@ November 30, 2025 (Originally Anthropic, migrated to OpenAI)
 
 ## Usage Examples
 
+**Note: Computer Use is ENABLED BY DEFAULT!**
+
 ### Basic Screenshot
 ```bash
-python -m src.agent --computer-use "take a screenshot and describe what you see"
+python -m src.agent "take a screenshot and describe what you see"
 ```
 
 ### Navigation + Extraction
 ```bash
-python -m src.agent --computer-use "click on recipes in the sidebar, then extract the database"
+python -m src.agent "click on recipes in the sidebar, then extract the database"
 ```
 
 ### Interactive Mode
 ```bash
-python -m src.agent --computer-use --interactive
+python -m src.agent --interactive
+```
+
+### Disable Computer Use (use standard AX navigation)
+```bash
+python -m src.agent --no-computer-use "extract content"
 ```
 
 ### Programmatic
 ```python
 from src.agent import create_agent
 
+# Computer Use enabled by default
 agent = create_agent(
-    llm_provider="anthropic",
-    computer_use=True,
     verbose=True
 )
 
 response = agent.run("navigate to roadmap and extract content")
+
+# Or disable it explicitly
+agent = create_agent(
+    computer_use=False,
+    verbose=True
+)
 ```
 
 ## Technical Implementation Details

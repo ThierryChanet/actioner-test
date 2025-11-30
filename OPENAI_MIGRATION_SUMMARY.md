@@ -207,6 +207,24 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 ✅ Zero linter errors  
 ✅ Simplified codebase  
 ✅ OpenAI-powered Computer Control Tools integrated  
+✅ **Computer Use enabled by default** for better user experience  
 
 The Notion agent is now fully powered by OpenAI with a cleaner, more maintainable architecture while preserving all functionality.
+
+## Update: Computer Use Now Default (Latest)
+
+As of the latest update, **Computer Use is now ENABLED BY DEFAULT**. Users no longer need to specify `--computer-use` flag:
+
+```bash
+# Before: Required flag
+python -m src.agent --computer-use "extract recipes"
+
+# After: Default behavior
+python -m src.agent "extract recipes"
+
+# Disable if needed:
+python -m src.agent --no-computer-use "extract recipes"
+```
+
+This provides a better default experience with powerful screen control capabilities out of the box.
 

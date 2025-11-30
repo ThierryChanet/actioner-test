@@ -25,27 +25,29 @@ from .core import create_agent
               help='Output directory (default: output)')
 @click.option('--verbose', '-v', is_flag=True,
               help='Enable verbose logging')
-@click.option('--computer-use', '-c', is_flag=True,
-              help='Enable Computer Use API for screen control (requires OpenAI)')
+@click.option('--no-computer-use', is_flag=True,
+              help='Disable Computer Use API (use standard AX navigation)')
 @click.option('--display', '-d',
               type=int,
               default=1,
               help='Display number for Computer Use (default: 1)')
 @click.pass_context
 def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, 
-        computer_use, display):
+        no_computer_use, display):
     """Notion Agent - Intelligent extraction assistant (powered by OpenAI).
+    
+    Computer Use is ENABLED by default for screen control via clicks/keyboard.
     
     Examples:
     
-        # One-shot query
+        # One-shot query (Computer Use enabled by default)
         python -m src.agent "extract all recipes from my database"
         
         # Interactive mode
         python -m src.agent --interactive
         
-        # With Computer Use (screen control via clicks/keyboard)
-        python -m src.agent --computer-use "navigate to recipes and extract"
+        # Disable Computer Use (use standard AX navigation)
+        python -m src.agent --no-computer-use "navigate to recipes"
         
         # With specific model
         python -m src.agent --model gpt-4 "what's on the roadmap page?"
@@ -59,9 +61,15 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose,
         click.echo("   Set it with: export OPENAI_API_KEY='your-key'")
         sys.exit(1)
     
-    # Validate Computer Use requirements
-    if computer_use and verbose:
-        click.echo(f"🖥️  Computer Use enabled (display {display})")
+    # Computer Use is enabled by default
+    computer_use = not no_computer_use
+    
+    # Show Computer Use status in verbose mode
+    if verbose:
+        if computer_use:
+            click.echo(f"🖥️  Computer Use enabled (display {display})")
+        else:
+            click.echo("📋 Using standard AX navigation")
     
     # Create agent
     try:
@@ -110,12 +118,12 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose,
 @click.option('--notion-token', envvar='NOTION_TOKEN')
 @click.option('--output-dir', '-o', default='output')
 @click.option('--verbose', '-v', is_flag=True)
-@click.option('--computer-use', '-c', is_flag=True,
-              help='Enable Computer Use API for screen control')
+@click.option('--no-computer-use', is_flag=True,
+              help='Disable Computer Use API (use standard AX navigation)')
 @click.option('--display', '-d', type=int, default=1,
               help='Display number for Computer Use')
-def interactive(model, notion_token, output_dir, verbose, computer_use, display):
-    """Start interactive chat mode."""
+def interactive(model, notion_token, output_dir, verbose, no_computer_use, display):
+    """Start interactive chat mode (Computer Use enabled by default)."""
     # Check for OpenAI API key
     if not os.environ.get('OPENAI_API_KEY'):
         click.echo("❌ Error: OPENAI_API_KEY required")
@@ -126,7 +134,7 @@ def interactive(model, notion_token, output_dir, verbose, computer_use, display)
         notion_token=notion_token,
         output_dir=output_dir,
         verbose=verbose,
-        computer_use=computer_use,
+        computer_use=not no_computer_use,
         display_num=display,
     )
     
@@ -140,12 +148,12 @@ def interactive(model, notion_token, output_dir, verbose, computer_use, display)
 @click.option('--notion-token', envvar='NOTION_TOKEN')
 @click.option('--output-dir', '-o', default='output')
 @click.option('--verbose', '-v', is_flag=True)
-@click.option('--computer-use', '-c', is_flag=True,
-              help='Enable Computer Use API for screen control')
+@click.option('--no-computer-use', is_flag=True,
+              help='Disable Computer Use API (use standard AX navigation)')
 @click.option('--display', '-d', type=int, default=1,
               help='Display number for Computer Use')
-def ask(query, model, notion_token, output_dir, verbose, computer_use, display):
-    """Ask the agent a single question."""
+def ask(query, model, notion_token, output_dir, verbose, no_computer_use, display):
+    """Ask the agent a single question (Computer Use enabled by default)."""
     # Check for OpenAI API key
     if not os.environ.get('OPENAI_API_KEY'):
         click.echo("❌ Error: OPENAI_API_KEY required")
@@ -156,7 +164,7 @@ def ask(query, model, notion_token, output_dir, verbose, computer_use, display):
         notion_token=notion_token,
         output_dir=output_dir,
         verbose=verbose,
-        computer_use=computer_use,
+        computer_use=not no_computer_use,
         display_num=display,
     )
     
@@ -174,7 +182,9 @@ def examples():
 NOTION AGENT - USAGE EXAMPLES
 ======================================================================
 
-Basic Extraction (powered by OpenAI):
+Note: Computer Use (screen control) is ENABLED BY DEFAULT!
+
+Basic Extraction (Computer Use enabled):
   python -m src.agent "extract all recipes"
   python -m src.agent "what's on the roadmap page?"
   python -m src.agent "get content from the meeting notes page"
@@ -183,10 +193,13 @@ Database Operations:
   python -m src.agent "extract 20 pages from my recipe database"
   python -m src.agent "how many recipes do I have?"
   
-Computer Use Mode (Screen Control with OpenAI):
-  python -m src.agent --computer-use "click on the recipes database"
-  python -m src.agent -c "navigate to roadmap page and extract it"
-  python -m src.agent --computer-use -i  # Interactive with screen control
+Screen Control (Computer Use - DEFAULT):
+  python -m src.agent "click on the recipes database"
+  python -m src.agent "navigate to roadmap page and extract it"
+  python -m src.agent "take a screenshot and describe what you see"
+
+Disable Computer Use (use standard AX navigation):
+  python -m src.agent --no-computer-use "extract all recipes"
 
 Interactive Mode:
   python -m src.agent --interactive

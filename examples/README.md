@@ -46,20 +46,21 @@ Features:
 
 #### Computer Use Mode 🖥️
 
-The agent now supports **OpenAI's Computer Control Tools** for direct screen control via mouse and keyboard:
+The agent uses **OpenAI's Computer Control Tools** by default for direct screen control via mouse and keyboard:
 
 ```bash
 # Requires OpenAI API key
 export OPENAI_API_KEY="sk-..."
 
-# Enable Computer Use mode
-python -m src.agent --computer-use "navigate to recipes and extract content"
+# Computer Use is enabled by default!
+python -m src.agent "navigate to recipes and extract content"
 
-# Or in code:
-agent = create_agent(
-    computer_use=True
-)
+# Or in code (Computer Use enabled by default):
+agent = create_agent()
 agent.run("take a screenshot and tell me what you see")
+
+# Disable Computer Use if needed:
+agent = create_agent(computer_use=False)
 ```
 
 **Computer Use Features:**

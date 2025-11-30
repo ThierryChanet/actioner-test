@@ -1,6 +1,8 @@
 # Computer Use API Integration
 
-The Notion agent now supports **OpenAI's Computer Control Tools**, providing direct screen control through mouse clicks, keyboard input, and screenshots. This enables the agent to navigate and interact with Notion (or any application) just like a human would.
+The Notion agent uses **OpenAI's Computer Control Tools** by default, providing direct screen control through mouse clicks, keyboard input, and screenshots. This enables the agent to navigate and interact with Notion (or any application) just like a human would.
+
+**Computer Use is ENABLED by default** - no flags required!
 
 ## Overview
 
@@ -26,14 +28,17 @@ Computer Use mode replaces the traditional AX-based navigation tools with genera
 # Set your OpenAI API key
 export OPENAI_API_KEY="sk-..."
 
-# Use Computer Use mode
-python -m src.agent --computer-use "navigate to recipes page"
+# Computer Use is enabled by default!
+python -m src.agent "navigate to recipes page"
 
-# Interactive mode with Computer Use
-python -m src.agent --computer-use --interactive
+# Interactive mode (Computer Use enabled by default)
+python -m src.agent --interactive
 
 # Verbose mode to see all actions
-python -m src.agent --computer-use --verbose "extract content"
+python -m src.agent --verbose "extract content"
+
+# Disable Computer Use if needed (use standard AX navigation)
+python -m src.agent --no-computer-use "extract content"
 ```
 
 ### Programmatic Usage
