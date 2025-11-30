@@ -1,15 +1,14 @@
-"""Anthropic Computer Use API client for screen interaction."""
+"""OpenAI Computer Use API client for screen interaction."""
 
 import os
 import base64
 import time
 from typing import Optional, Tuple, Dict, Any, Literal
 from pathlib import Path
-import tempfile
 
 import Quartz
 import Cocoa
-from anthropic import Anthropic
+from openai import OpenAI
 
 
 ActionType = Literal["key", "type", "mouse_move", "left_click", "left_click_drag", 
@@ -18,7 +17,7 @@ ActionType = Literal["key", "type", "mouse_move", "left_click", "left_click_drag
 
 
 class ComputerUseClient:
-    """Client for Anthropic Computer Use API with macOS integration."""
+    """Client for OpenAI Computer Use API with macOS integration."""
     
     def __init__(
         self,
@@ -30,16 +29,16 @@ class ComputerUseClient:
         """Initialize the Computer Use client.
         
         Args:
-            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
+            api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
             display_num: Display number (1-based, usually 1)
             display_width: Override display width (auto-detected if None)
             display_height: Override display height (auto-detected if None)
         """
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY not found in environment")
+            raise ValueError("OPENAI_API_KEY not found in environment")
         
-        self.client = Anthropic(api_key=self.api_key)
+        self.client = OpenAI(api_key=self.api_key)
         self.display_num = display_num
         
         # Get display dimensions
@@ -349,4 +348,3 @@ class ComputerUseClient:
             "height": self.height,
             "display_num": self.display_num
         }
-

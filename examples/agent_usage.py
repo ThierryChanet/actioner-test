@@ -25,9 +25,8 @@ def example_one_shot_query():
     print("EXAMPLE 1: One-shot Query")
     print("="*70 + "\n")
     
-    # Create agent
+    # Create agent (uses OpenAI)
     agent = create_agent(
-        llm_provider="openai",  # or "anthropic"
         verbose=False
     )
     
@@ -43,7 +42,7 @@ def example_extraction():
     print("EXAMPLE 2: Extract Page Content")
     print("="*70 + "\n")
     
-    agent = create_agent(llm_provider="openai")
+    agent = create_agent()
     
     # Extract a specific page
     response = agent.run("Extract content from the Roadmap page")
@@ -58,7 +57,6 @@ def example_database_extraction():
     print("="*70 + "\n")
     
     agent = create_agent(
-        llm_provider="openai",
         notion_token=os.environ.get('NOTION_TOKEN')
     )
     
@@ -74,7 +72,7 @@ def example_multi_turn_conversation():
     print("EXAMPLE 4: Multi-turn Conversation")
     print("="*70 + "\n")
     
-    agent = create_agent(llm_provider="openai")
+    agent = create_agent()
     
     # First query
     response1 = agent.chat("What pages do I have?")
@@ -91,7 +89,7 @@ def example_with_state():
     print("EXAMPLE 5: Agent State")
     print("="*70 + "\n")
     
-    agent = create_agent(llm_provider="openai")
+    agent = create_agent()
     
     # Run some queries
     agent.run("List my pages")
@@ -114,8 +112,7 @@ def example_custom_config():
     print("="*70 + "\n")
     
     agent = create_agent(
-        llm_provider="anthropic",
-        model="claude-3-5-sonnet-20241022",
+        model="gpt-4",
         notion_token=os.environ.get('NOTION_TOKEN'),
         output_dir="custom_output",
         verbose=True
@@ -131,13 +128,12 @@ def example_computer_use():
     print("EXAMPLE 7: Computer Use Mode (Screen Control)")
     print("="*70 + "\n")
     
-    # Requires ANTHROPIC_API_KEY
-    if not os.environ.get('ANTHROPIC_API_KEY'):
-        print("⚠️  Skipped: Requires ANTHROPIC_API_KEY for Computer Use")
+    # Requires OPENAI_API_KEY
+    if not os.environ.get('OPENAI_API_KEY'):
+        print("⚠️  Skipped: Requires OPENAI_API_KEY for Computer Use")
         return
     
     agent = create_agent(
-        llm_provider="anthropic",
         computer_use=True,
         verbose=True
     )
@@ -153,12 +149,11 @@ def example_computer_use_navigation():
     print("EXAMPLE 8: Computer Use Navigation")
     print("="*70 + "\n")
     
-    if not os.environ.get('ANTHROPIC_API_KEY'):
-        print("⚠️  Skipped: Requires ANTHROPIC_API_KEY for Computer Use")
+    if not os.environ.get('OPENAI_API_KEY'):
+        print("⚠️  Skipped: Requires OPENAI_API_KEY for Computer Use")
         return
     
     agent = create_agent(
-        llm_provider="anthropic",
         computer_use=True,
         verbose=True
     )
@@ -176,12 +171,11 @@ def example_computer_use_with_extraction():
     print("EXAMPLE 9: Computer Use + Extraction")
     print("="*70 + "\n")
     
-    if not os.environ.get('ANTHROPIC_API_KEY'):
-        print("⚠️  Skipped: Requires ANTHROPIC_API_KEY for Computer Use")
+    if not os.environ.get('OPENAI_API_KEY'):
+        print("⚠️  Skipped: Requires OPENAI_API_KEY for Computer Use")
         return
     
     agent = create_agent(
-        llm_provider="anthropic",
         computer_use=True,
         verbose=True
     )
@@ -200,8 +194,8 @@ def main():
     print("="*70)
     
     # Make sure API key is set
-    if not os.environ.get('OPENAI_API_KEY') and not os.environ.get('ANTHROPIC_API_KEY'):
-        print("\n❌ Error: Set OPENAI_API_KEY or ANTHROPIC_API_KEY")
+    if not os.environ.get('OPENAI_API_KEY'):
+        print("\n❌ Error: Set OPENAI_API_KEY")
         print("   export OPENAI_API_KEY='your-key'")
         return
     
@@ -218,7 +212,7 @@ def main():
         # example_with_state()
         # example_custom_config()
         
-        # Computer Use examples (require ANTHROPIC_API_KEY):
+        # Computer Use examples (require OPENAI_API_KEY):
         # example_computer_use()
         # example_computer_use_navigation()
         # example_computer_use_with_extraction()

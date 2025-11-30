@@ -10,7 +10,6 @@ from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
 # Load environment variables from .env file
 load_dotenv()
 from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_classic.memory import ConversationBufferMemory
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -78,7 +77,7 @@ Remember: You can see the actual Notion app and interact with it directly. Be pr
 """
 
 
-COMPUTER_USE_SYSTEM_PROMPT = """You are a Computer Control Expert assistant with Notion extraction capabilities. You can control the computer through mouse clicks, keyboard input, and screenshots to help users extract and analyze content from their Notion workspace.
+COMPUTER_USE_SYSTEM_PROMPT = """You are a Computer Control Expert assistant with Notion extraction capabilities. You can control the computer through mouse clicks, keyboard input, and screenshots using OpenAI's Computer Control Tools to help users extract and analyze content from their Notion workspace.
 
 ## Your Capabilities
 
@@ -169,7 +168,7 @@ You:
 - Provide meaningful summaries of extracted content
 - If actions fail, explain what went wrong and try alternatives
 
-Remember: You have full computer control. Take screenshots frequently to understand state, and use precise coordinates for reliable interactions!
+Remember: You have full computer control using OpenAI's Computer Control Tools. Take screenshots frequently to understand state, and use precise coordinates for reliable interactions!
 """
 
 
@@ -180,7 +179,6 @@ class NotionAgent:
         self,
         notion_token: Optional[str] = None,
         output_dir: str = "output",
-        llm_provider: str = "openai",
         model: Optional[str] = None,
         temperature: float = 0,
         verbose: bool = False,
@@ -192,7 +190,6 @@ class NotionAgent:
         Args:
             notion_token: Optional Notion API token
             output_dir: Directory for output files
-            llm_provider: LLM provider ('openai' or 'anthropic')
             model: Specific model to use (auto-selects if None)
             temperature: LLM temperature (0 = deterministic)
             verbose: Enable verbose logging
@@ -224,8 +221,8 @@ class NotionAgent:
                     print("Falling back to standard tools")
                 self.computer_use = False
         
-        # Initialize LLM
-        self.llm = self._init_llm(llm_provider, model, temperature)
+        # Initialize LLM (OpenAI only)
+        self.llm = self._init_llm(model, temperature)
         
         # Initialize tools (computer use or standard)
         if self.computer_use and self.computer_client:
@@ -253,45 +250,27 @@ class NotionAgent:
         # Initialize agent
         self.agent_executor = self._create_agent()
     
-    def _init_llm(self, provider: str, model: Optional[str], temperature: float):
-        """Initialize LLM based on provider.
+    def _init_llm(self, model: Optional[str], temperature: float):
+        """Initialize OpenAI LLM.
         
         Args:
-            provider: 'openai' or 'anthropic'
             model: Model name or None for default
             temperature: Temperature setting
             
         Returns:
             LLM instance
         """
-        if provider == "openai":
-            model = model or "gpt-4-turbo-preview"
-            api_key = os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    "OPENAI_API_KEY environment variable required for OpenAI"
-                )
-            return ChatOpenAI(
-                model=model,
-                temperature=temperature,
-                api_key=api_key
+        model = model or "gpt-4-turbo-preview"
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "OPENAI_API_KEY environment variable required"
             )
-        
-        elif provider == "anthropic":
-            model = model or "claude-3-5-sonnet-20241022"
-            api_key = os.environ.get("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    "ANTHROPIC_API_KEY environment variable required for Anthropic"
-                )
-            return ChatAnthropic(
-                model=model,
-                temperature=temperature,
-                api_key=api_key
-            )
-        
-        else:
-            raise ValueError(f"Unsupported LLM provider: {provider}")
+        return ChatOpenAI(
+            model=model,
+            temperature=temperature,
+            api_key=api_key
+        )
     
     def _create_agent(self) -> AgentExecutor:
         """Create the agent executor.
@@ -444,7 +423,6 @@ class NotionAgent:
 
 
 def create_agent(
-    llm_provider: str = "openai",
     model: Optional[str] = None,
     notion_token: Optional[str] = None,
     output_dir: str = "output",
@@ -455,8 +433,7 @@ def create_agent(
     """Create a Notion agent instance.
     
     Args:
-        llm_provider: 'openai' or 'anthropic'
-        model: Specific model name or None for default
+        model: Specific model name or None for default (uses OpenAI)
         notion_token: Optional Notion API token
         output_dir: Output directory
         verbose: Enable verbose logging
@@ -469,7 +446,6 @@ def create_agent(
     return NotionAgent(
         notion_token=notion_token,
         output_dir=output_dir,
-        llm_provider=llm_provider,
         model=model,
         verbose=verbose,
         computer_use=computer_use,

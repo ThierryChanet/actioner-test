@@ -1,4 +1,4 @@
-"""LangChain tools for Anthropic Computer Use API."""
+"""LangChain tools for OpenAI Computer Control Tools."""
 
 import json
 from typing import Optional, Type, Tuple

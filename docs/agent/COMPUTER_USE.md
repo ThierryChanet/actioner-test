@@ -1,6 +1,6 @@
 # Computer Use API Integration
 
-The Notion agent now supports **Anthropic's Computer Use API**, providing direct screen control through mouse clicks, keyboard input, and screenshots. This enables the agent to navigate and interact with Notion (or any application) just like a human would.
+The Notion agent now supports **OpenAI's Computer Control Tools**, providing direct screen control through mouse clicks, keyboard input, and screenshots. This enables the agent to navigate and interact with Notion (or any application) just like a human would.
 
 ## Overview
 
@@ -14,7 +14,7 @@ Computer Use mode replaces the traditional AX-based navigation tools with genera
 
 ## Requirements
 
-- **Anthropic API Key**: Computer Use requires an Anthropic API key
+- **OpenAI API Key**: Computer Use requires an OpenAI API key
 - **macOS**: Uses macOS Quartz and Cocoa APIs for screen interaction
 - **Accessibility Permissions**: Required for keyboard/mouse automation
 
@@ -23,8 +23,8 @@ Computer Use mode replaces the traditional AX-based navigation tools with genera
 ### Command Line
 
 ```bash
-# Set your Anthropic API key
-export ANTHROPIC_API_KEY="sk-ant-..."
+# Set your OpenAI API key
+export OPENAI_API_KEY="sk-..."
 
 # Use Computer Use mode
 python -m src.agent --computer-use "navigate to recipes page"
@@ -43,7 +43,6 @@ from src.agent import create_agent
 
 # Create agent with Computer Use enabled
 agent = create_agent(
-    llm_provider="anthropic",  # Required for Computer Use
     computer_use=True,
     verbose=True
 )
@@ -185,14 +184,19 @@ agent = create_agent(
 )
 ```
 
-### LLM Provider
+### Model Selection
 
-Computer Use currently works best with Anthropic models:
+Computer Use is powered by OpenAI models:
 
 ```python
 agent = create_agent(
-    llm_provider="anthropic",
-    model="claude-3-5-sonnet-20241022",  # Recommended model
+    model="gpt-4-turbo-preview",  # Default model
+    computer_use=True
+)
+
+# Or use a different OpenAI model
+agent = create_agent(
+    model="gpt-4",
     computer_use=True
 )
 ```
@@ -252,18 +256,18 @@ python -m src.agent --computer-use --verbose "your query"
 | **Flexibility** | Notion-specific | Any application |
 | **Reliability** | High (uses accessibility) | Medium (visual-based) |
 | **Speed** | Fast | Slower (screenshots) |
-| **Setup** | Accessibility permissions | Anthropic API key |
+| **Setup** | Accessibility permissions | OpenAI API key |
 | **Use Case** | Known page structures | Exploratory navigation |
 
 ## Troubleshooting
 
 ### "Computer Use initialization failed"
 
-**Cause**: Missing ANTHROPIC_API_KEY
+**Cause**: Missing OPENAI_API_KEY
 
 **Solution**:
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
+export OPENAI_API_KEY="sk-..."
 ```
 
 ### "Failed to capture screenshot"
@@ -319,13 +323,13 @@ Planned improvements:
 - [Agent Quick Start](AGENT_QUICKSTART.md)
 - [Agent README](AGENT_README.md)
 - [Example Queries](AGENT_QUERIES.md)
-- [Anthropic Computer Use Documentation](https://docs.anthropic.com/claude/docs/computer-use)
+- [OpenAI Computer Control Tools Documentation](https://platform.openai.com/docs/guides/tools-computer-use)
 
 ## Support
 
 For issues or questions about Computer Use:
 1. Check error messages with `--verbose`
-2. Verify API key is set: `echo $ANTHROPIC_API_KEY`
+2. Verify API key is set: `echo $OPENAI_API_KEY`
 3. Test with simple queries: `"take a screenshot"`
 4. Review logs in `output/logs/`
 5. Open an issue on GitHub with error details

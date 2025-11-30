@@ -11,7 +11,7 @@ This directory contains example scripts demonstrating various extraction methods
    ```
 
 2. **Add your API keys to `.env`:**
-   - For AI Agent: Add your `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
+   - For AI Agent: Add your `OPENAI_API_KEY`
    - For API extraction: Add your `NOTION_TOKEN` (get from https://www.notion.so/my-integrations)
    - **Important:** Don't use quotes around the values!
 
@@ -46,18 +46,17 @@ Features:
 
 #### Computer Use Mode 🖥️
 
-The agent now supports **Computer Use API** for direct screen control via mouse and keyboard:
+The agent now supports **OpenAI's Computer Control Tools** for direct screen control via mouse and keyboard:
 
 ```bash
-# Requires Anthropic API key
-export ANTHROPIC_API_KEY="sk-ant-..."
+# Requires OpenAI API key
+export OPENAI_API_KEY="sk-..."
 
 # Enable Computer Use mode
 python -m src.agent --computer-use "navigate to recipes and extract content"
 
 # Or in code:
 agent = create_agent(
-    llm_provider="anthropic",
     computer_use=True
 )
 agent.run("take a screenshot and tell me what you see")

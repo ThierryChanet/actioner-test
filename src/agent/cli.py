@@ -16,12 +16,8 @@ from .core import create_agent
 @click.argument('query', nargs=-1, required=False)
 @click.option('--interactive', '-i', is_flag=True, 
               help='Start interactive mode')
-@click.option('--provider', '-p', 
-              type=click.Choice(['openai', 'anthropic']),
-              default='openai',
-              help='LLM provider (default: openai)')
 @click.option('--model', '-m',
-              help='Specific model to use')
+              help='Specific OpenAI model to use (default: gpt-4-turbo-preview)')
 @click.option('--notion-token', envvar='NOTION_TOKEN',
               help='Notion API token (or set NOTION_TOKEN env var)')
 @click.option('--output-dir', '-o',
@@ -30,15 +26,15 @@ from .core import create_agent
 @click.option('--verbose', '-v', is_flag=True,
               help='Enable verbose logging')
 @click.option('--computer-use', '-c', is_flag=True,
-              help='Enable Computer Use API for screen control (requires Anthropic)')
+              help='Enable Computer Use API for screen control (requires OpenAI)')
 @click.option('--display', '-d',
               type=int,
               default=1,
               help='Display number for Computer Use (default: 1)')
 @click.pass_context
-def cli(ctx, query, interactive, provider, model, notion_token, output_dir, verbose, 
+def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, 
         computer_use, display):
-    """Notion Agent - Intelligent extraction assistant.
+    """Notion Agent - Intelligent extraction assistant (powered by OpenAI).
     
     Examples:
     
@@ -52,35 +48,24 @@ def cli(ctx, query, interactive, provider, model, notion_token, output_dir, verb
         python -m src.agent --computer-use "navigate to recipes and extract"
         
         # With specific model
-        python -m src.agent --provider anthropic "what's on the roadmap page?"
+        python -m src.agent --model gpt-4 "what's on the roadmap page?"
         
         # Help
         python -m src.agent --help
     """
-    # Check for API key
-    if provider == 'openai' and not os.environ.get('OPENAI_API_KEY'):
+    # Check for OpenAI API key
+    if not os.environ.get('OPENAI_API_KEY'):
         click.echo("❌ Error: OPENAI_API_KEY environment variable required")
         click.echo("   Set it with: export OPENAI_API_KEY='your-key'")
         sys.exit(1)
     
-    if provider == 'anthropic' and not os.environ.get('ANTHROPIC_API_KEY'):
-        click.echo("❌ Error: ANTHROPIC_API_KEY environment variable required")
-        click.echo("   Set it with: export ANTHROPIC_API_KEY='your-key'")
-        sys.exit(1)
-    
     # Validate Computer Use requirements
-    if computer_use:
-        if not os.environ.get('ANTHROPIC_API_KEY'):
-            click.echo("❌ Error: Computer Use requires ANTHROPIC_API_KEY")
-            click.echo("   Set it with: export ANTHROPIC_API_KEY='your-key'")
-            sys.exit(1)
-        if verbose:
-            click.echo(f"🖥️  Computer Use enabled (display {display})")
+    if computer_use and verbose:
+        click.echo(f"🖥️  Computer Use enabled (display {display})")
     
     # Create agent
     try:
         agent = create_agent(
-            llm_provider=provider,
             model=model,
             notion_token=notion_token,
             output_dir=output_dir,
@@ -120,10 +105,8 @@ def cli(ctx, query, interactive, provider, model, notion_token, output_dir, verb
 
 
 @cli.command()
-@click.option('--provider', '-p',
-              type=click.Choice(['openai', 'anthropic']),
-              default='openai')
-@click.option('--model', '-m')
+@click.option('--model', '-m',
+              help='Specific OpenAI model to use')
 @click.option('--notion-token', envvar='NOTION_TOKEN')
 @click.option('--output-dir', '-o', default='output')
 @click.option('--verbose', '-v', is_flag=True)
@@ -131,10 +114,14 @@ def cli(ctx, query, interactive, provider, model, notion_token, output_dir, verb
               help='Enable Computer Use API for screen control')
 @click.option('--display', '-d', type=int, default=1,
               help='Display number for Computer Use')
-def interactive(provider, model, notion_token, output_dir, verbose, computer_use, display):
+def interactive(model, notion_token, output_dir, verbose, computer_use, display):
     """Start interactive chat mode."""
+    # Check for OpenAI API key
+    if not os.environ.get('OPENAI_API_KEY'):
+        click.echo("❌ Error: OPENAI_API_KEY required")
+        sys.exit(1)
+    
     agent = create_agent(
-        llm_provider=provider,
         model=model,
         notion_token=notion_token,
         output_dir=output_dir,
@@ -148,10 +135,8 @@ def interactive(provider, model, notion_token, output_dir, verbose, computer_use
 
 @cli.command()
 @click.argument('query')
-@click.option('--provider', '-p',
-              type=click.Choice(['openai', 'anthropic']),
-              default='openai')
-@click.option('--model', '-m')
+@click.option('--model', '-m',
+              help='Specific OpenAI model to use')
 @click.option('--notion-token', envvar='NOTION_TOKEN')
 @click.option('--output-dir', '-o', default='output')
 @click.option('--verbose', '-v', is_flag=True)
@@ -159,10 +144,14 @@ def interactive(provider, model, notion_token, output_dir, verbose, computer_use
               help='Enable Computer Use API for screen control')
 @click.option('--display', '-d', type=int, default=1,
               help='Display number for Computer Use')
-def ask(query, provider, model, notion_token, output_dir, verbose, computer_use, display):
+def ask(query, model, notion_token, output_dir, verbose, computer_use, display):
     """Ask the agent a single question."""
+    # Check for OpenAI API key
+    if not os.environ.get('OPENAI_API_KEY'):
+        click.echo("❌ Error: OPENAI_API_KEY required")
+        sys.exit(1)
+    
     agent = create_agent(
-        llm_provider=provider,
         model=model,
         notion_token=notion_token,
         output_dir=output_dir,
@@ -185,7 +174,7 @@ def examples():
 NOTION AGENT - USAGE EXAMPLES
 ======================================================================
 
-Basic Extraction:
+Basic Extraction (powered by OpenAI):
   python -m src.agent "extract all recipes"
   python -m src.agent "what's on the roadmap page?"
   python -m src.agent "get content from the meeting notes page"
@@ -194,7 +183,7 @@ Database Operations:
   python -m src.agent "extract 20 pages from my recipe database"
   python -m src.agent "how many recipes do I have?"
   
-Computer Use Mode (Screen Control):
+Computer Use Mode (Screen Control with OpenAI):
   python -m src.agent --computer-use "click on the recipes database"
   python -m src.agent -c "navigate to roadmap page and extract it"
   python -m src.agent --computer-use -i  # Interactive with screen control
@@ -203,17 +192,16 @@ Interactive Mode:
   python -m src.agent --interactive
   python -m src.agent -i
 
-With Specific Provider/Model:
-  python -m src.agent --provider anthropic "extract recipes"
+With Specific Model:
   python -m src.agent --model gpt-4 "analyze my pages"
+  python -m src.agent --model gpt-4o "extract recipes"
 
 Verbose Mode (see tool calls):
   python -m src.agent --verbose "extract database"
 
 Environment Variables:
-  export OPENAI_API_KEY="sk-..."
-  export ANTHROPIC_API_KEY="sk-ant-..."  # Required for --computer-use
-  export NOTION_TOKEN="secret_..."
+  export OPENAI_API_KEY="sk-..."         # Required
+  export NOTION_TOKEN="secret_..."       # Optional, for API extraction
 
 ======================================================================
 """
@@ -231,12 +219,10 @@ def check():
     
     # Check for API keys
     openai_key = os.environ.get('OPENAI_API_KEY')
-    anthropic_key = os.environ.get('ANTHROPIC_API_KEY')
     notion_token = os.environ.get('NOTION_TOKEN')
     
-    checks.append(("OpenAI API Key", bool(openai_key)))
-    checks.append(("Anthropic API Key", bool(anthropic_key)))
-    checks.append(("Notion API Token", bool(notion_token)))
+    checks.append(("OpenAI API Key (Required)", bool(openai_key)))
+    checks.append(("Notion API Token (Optional)", bool(notion_token)))
     
     # Check Python packages
     try:
@@ -252,10 +238,10 @@ def check():
         checks.append(("LangChain OpenAI installed", False))
     
     try:
-        import langchain_anthropic
-        checks.append(("LangChain Anthropic installed", True))
+        import openai
+        checks.append(("OpenAI SDK installed", True))
     except ImportError:
-        checks.append(("LangChain Anthropic installed", False))
+        checks.append(("OpenAI SDK installed", False))
     
     # Display results
     for check_name, passed in checks:
@@ -264,22 +250,22 @@ def check():
     
     click.echo("\n" + "="*70)
     
-    # Summary
-    total = len(checks)
-    passed = sum(1 for _, p in checks if p)
+    # Summary - only count required checks
+    required_checks = [checks[0]] + checks[2:]  # OpenAI key + packages
+    total = len(required_checks)
+    passed = sum(1 for _, p in required_checks if p)
     
     if passed == total:
-        click.echo("\n✅ All checks passed! You're ready to use the agent.\n")
+        click.echo("\n✅ All required checks passed! You're ready to use the agent.\n")
     else:
-        click.echo(f"\n⚠️  {total - passed} checks failed. Please fix the issues above.\n")
+        click.echo(f"\n⚠️  {total - passed} required checks failed. Please fix the issues above.\n")
         
         # Provide help
-        if not (openai_key or anthropic_key):
-            click.echo("To use the agent, set at least one LLM API key:")
+        if not openai_key:
+            click.echo("To use the agent, set your OpenAI API key:")
             click.echo("  export OPENAI_API_KEY='your-key'")
-            click.echo("  export ANTHROPIC_API_KEY='your-key'")
         
-        if not all(p for _, p in checks[3:]):
+        if not all(p for _, p in checks[2:]):
             click.echo("\nTo install missing packages:")
             click.echo("  pip install -r requirements.txt")
         

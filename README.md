@@ -44,7 +44,7 @@ pip install -e .
 ```bash
 cp .env.example .env
 # Edit .env and add your API keys (without quotes!):
-# - OPENAI_API_KEY or ANTHROPIC_API_KEY (for AI agent)
+# - OPENAI_API_KEY (for AI agent)
 # - NOTION_TOKEN (optional, for API-based extraction)
 ```
 

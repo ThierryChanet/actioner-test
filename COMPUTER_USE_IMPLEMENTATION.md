@@ -2,18 +2,18 @@
 
 ## Overview
 
-Successfully integrated **Anthropic's Computer Use API** into the Notion agent, providing general-purpose computer control through mouse clicks, keyboard input, and screenshots. This replaces traditional AX-based navigation with visual, coordinate-based interaction.
+Successfully integrated **OpenAI's Computer Control Tools** into the Notion agent, providing general-purpose computer control through mouse clicks, keyboard input, and screenshots. This replaces traditional AX-based navigation with visual, coordinate-based interaction.
 
 ## Implementation Date
 
-November 30, 2025
+November 30, 2025 (Originally Anthropic, migrated to OpenAI)
 
 ## Changes Made
 
 ### New Files Created
 
 #### 1. `src/agent/computer_use_client.py`
-- Core client for Anthropic Computer Use API
+- Core client for OpenAI Computer Control Tools
 - Handles screenshot capture using macOS Quartz/Cocoa
 - Executes mouse actions (move, click, double-click, right-click)
 - Executes keyboard actions (type text, press keys)
@@ -58,49 +58,49 @@ November 30, 2025
 
 #### 1. `src/agent/core.py`
 **Changes:**
-- Added imports for `ComputerUseClient` and `get_computer_use_tools`
-- Created new `COMPUTER_USE_SYSTEM_PROMPT` with computer control instructions
-- Updated `NotionAgent.__init__()`:
-  - Added `computer_use` parameter (default: False)
-  - Added `display_num` parameter for multi-monitor support
-  - Conditional tool loading: Computer Use tools + extraction tools OR standard tools
-  - Computer Use client initialization with error handling
-- Updated `_create_agent()`: Selects appropriate system prompt based on mode
-- Updated `reset()`: Reinitializes tools correctly for both modes
-- Updated `create_agent()`: Added computer use parameters
+- Removed Anthropic LLM provider support (OpenAI only)
+- Simplified `_init_llm()` method to only support OpenAI
+- Removed `llm_provider` parameter from `__init__()` and `create_agent()`
+- Updated `COMPUTER_USE_SYSTEM_PROMPT` with OpenAI Computer Control references
+- Conditional tool loading: Computer Use tools + extraction tools OR standard tools
+- Computer Use client initialization with error handling
+- Selects appropriate system prompt based on mode
 
 **System Prompt Strategy:**
 - Standard mode: Original Notion-focused prompt with AX navigation
-- Computer Use mode: Enhanced prompt with screenshot-first workflow and coordinate-based actions
+- Computer Use mode: Enhanced prompt with screenshot-first workflow and coordinate-based actions using OpenAI
 
 #### 2. `src/agent/cli.py`
 **Changes:**
-- Added `--computer-use` / `-c` flag to all commands
-- Added `--display` / `-d` option for display selection
-- Updated help text with Computer Use examples
-- Added validation: Computer Use requires ANTHROPIC_API_KEY
-- Updated `interactive()` command with Computer Use support
-- Updated `ask()` command with Computer Use support
-- Updated examples section with Computer Use usage
+- Removed `--provider` option (always uses OpenAI)
+- Simplified API key validation to only check OPENAI_API_KEY
+- Updated help text to reflect OpenAI-only usage
+- Updated `interactive()` command (no provider parameter)
+- Updated `ask()` command (no provider parameter)
+- Updated `examples()` command with OpenAI-specific examples
+- Updated `check()` command to only validate OpenAI dependencies
 
 **CLI Flags:**
 ```bash
 --computer-use    Enable Computer Use API for screen control
 --display N       Display number (default: 1)
+--model M         Specific OpenAI model to use
 ```
 
 #### 3. `requirements.txt`
 **Changes:**
-- Added comment to `anthropic>=0.18.0`: "Includes Computer Use API support"
-- No new dependencies needed (Computer Use is part of anthropic package)
+- Removed `anthropic>=0.18.0` dependency
+- Removed `langchain-anthropic>=0.1.0` dependency
+- Updated `openai>=1.30.0` with comment: "Includes Responses API and Computer Use support"
+- Simplified dependencies to OpenAI ecosystem only
 
 #### 4. `examples/agent_usage.py`
 **Changes:**
-- Added `example_computer_use()`: Basic screenshot demonstration
-- Added `example_computer_use_navigation()`: Navigation with clicks
-- Added `example_computer_use_with_extraction()`: Combined navigation + extraction
-- Updated main section with commented Computer Use examples
-- All examples check for ANTHROPIC_API_KEY before running
+- Removed `llm_provider` parameter from all examples
+- Updated all examples to use OpenAI by default
+- Updated Computer Use examples to check for OPENAI_API_KEY
+- Simplified agent creation calls (no provider choice needed)
+- Updated comments to reflect OpenAI-only usage
 
 #### 5. `examples/README.md`
 **Changes:**
@@ -228,14 +228,11 @@ response = agent.run("navigate to roadmap and extract content")
 
 ### Environment Variables
 ```bash
-# Required for Computer Use
-export ANTHROPIC_API_KEY="sk-ant-..."
+# Required for all operations (including Computer Use)
+export OPENAI_API_KEY="sk-..."
 
 # Optional for API extraction
 export NOTION_TOKEN="secret_..."
-
-# Optional for standard mode
-export OPENAI_API_KEY="sk-..."
 ```
 
 ### System Permissions
@@ -259,7 +256,7 @@ export OPENAI_API_KEY="sk-..."
 
 1. **Full Control**: Computer Use provides complete control of the computer
 2. **Opt-in Required**: Must explicitly enable with `--computer-use`
-3. **API Key Required**: Only works with valid Anthropic API key
+3. **API Key Required**: Only works with valid OpenAI API key
 4. **Local Execution**: All actions execute locally (no remote control)
 5. **Screen Visibility**: Agent can only see what's on screen
 6. **No File Access**: Computer Use tools don't provide file system access
@@ -300,16 +297,15 @@ python -m src.agent --computer-use "take a screenshot and tell me what pages are
 
 ### For Developers
 
-**Before:**
+**Standard Mode:**
 ```python
-agent = create_agent(llm_provider="openai")
+agent = create_agent()
 response = agent.run("navigate to page X")
 ```
 
-**After:**
+**Computer Use Mode:**
 ```python
 agent = create_agent(
-    llm_provider="anthropic",
     computer_use=True
 )
 response = agent.run("click on page X in the sidebar")
@@ -336,14 +332,14 @@ All documentation has been updated:
 
 ## Summary
 
-The Computer Use integration provides powerful new capabilities while maintaining the robustness of the existing agent. Key achievements:
+The Computer Use integration powered by OpenAI provides powerful new capabilities while maintaining the robustness of the existing agent. Key achievements:
 
 1. ✅ **General-Purpose Control**: Works with any application, not just Notion
 2. ✅ **Visual Navigation**: Agent can see and interact with screen like a human
 3. ✅ **Flexible Interaction**: Supports clicks, typing, and keyboard shortcuts
-4. ✅ **Backward Compatible**: Existing functionality preserved
+4. ✅ **Simplified Architecture**: OpenAI-only implementation (no dual-provider complexity)
 5. ✅ **Well Documented**: Comprehensive docs and examples
 6. ✅ **Production Ready**: Error handling, fallbacks, and safety measures
 
-The implementation successfully replaces AX-based navigation with Computer Use while preserving the fast AX extraction tools, creating a hybrid approach that combines the best of both worlds.
+The implementation uses OpenAI's Computer Control Tools for navigation while preserving the fast AX extraction tools, creating a hybrid approach that combines the best of both worlds with a unified LLM provider.
 
