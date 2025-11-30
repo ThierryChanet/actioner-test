@@ -8,6 +8,10 @@ This shows how to use the agent programmatically in your own scripts.
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -121,6 +125,74 @@ def example_custom_config():
     print(f"Agent: {response}\n")
 
 
+def example_computer_use():
+    """Example: Computer Use mode with screen control."""
+    print("\n" + "="*70)
+    print("EXAMPLE 7: Computer Use Mode (Screen Control)")
+    print("="*70 + "\n")
+    
+    # Requires ANTHROPIC_API_KEY
+    if not os.environ.get('ANTHROPIC_API_KEY'):
+        print("⚠️  Skipped: Requires ANTHROPIC_API_KEY for Computer Use")
+        return
+    
+    agent = create_agent(
+        llm_provider="anthropic",
+        computer_use=True,
+        verbose=True
+    )
+    
+    # Agent will use mouse/keyboard to navigate
+    response = agent.run("Take a screenshot and tell me what you see on the screen")
+    print(f"Agent: {response}\n")
+
+
+def example_computer_use_navigation():
+    """Example: Computer Use for navigation."""
+    print("\n" + "="*70)
+    print("EXAMPLE 8: Computer Use Navigation")
+    print("="*70 + "\n")
+    
+    if not os.environ.get('ANTHROPIC_API_KEY'):
+        print("⚠️  Skipped: Requires ANTHROPIC_API_KEY for Computer Use")
+        return
+    
+    agent = create_agent(
+        llm_provider="anthropic",
+        computer_use=True,
+        verbose=True
+    )
+    
+    # Agent will click and navigate using the screen
+    response = agent.run(
+        "Navigate to the recipes page in Notion by clicking on it in the sidebar"
+    )
+    print(f"Agent: {response}\n")
+
+
+def example_computer_use_with_extraction():
+    """Example: Computer Use for navigation + extraction."""
+    print("\n" + "="*70)
+    print("EXAMPLE 9: Computer Use + Extraction")
+    print("="*70 + "\n")
+    
+    if not os.environ.get('ANTHROPIC_API_KEY'):
+        print("⚠️  Skipped: Requires ANTHROPIC_API_KEY for Computer Use")
+        return
+    
+    agent = create_agent(
+        llm_provider="anthropic",
+        computer_use=True,
+        verbose=True
+    )
+    
+    # Combines navigation and extraction
+    response = agent.run(
+        "Find and click on the Roadmap page, then extract its content"
+    )
+    print(f"Agent: {response}\n")
+
+
 def main():
     """Run examples."""
     print("\n" + "="*70)
@@ -145,6 +217,11 @@ def main():
         # example_multi_turn_conversation()
         # example_with_state()
         # example_custom_config()
+        
+        # Computer Use examples (require ANTHROPIC_API_KEY):
+        # example_computer_use()
+        # example_computer_use_navigation()
+        # example_computer_use_with_extraction()
         
     except Exception as e:
         print(f"\n❌ Error: {e}")

@@ -5,12 +5,12 @@ A macOS tool that extracts text content from the Notion desktop app using **dire
 ## Features
 
 - **🤖 AI Agent (NEW!)** - Natural language interface powered by LangChain - ask questions in plain English!
-- **Direct AX-based text extraction** - Uses macOS Accessibility APIs for reliable content capture
+- **OCR + Click Navigation (Default)** - Reliable visual navigation using macOS Vision API and mouse automation
+- **Direct AX-based text extraction** - Uses macOS Accessibility APIs for content capture
 - **Database extraction (AX Navigation)** - Click through database rows to extract pages - **no API token needed!**
 - **Database extraction (API)** - Fast bulk extraction using Notion API
-- **Programmatic navigation** - Navigate between Notion pages without mouse simulation
+- **Hybrid extraction** - Combines OCR navigation with AX content extraction
 - **Deterministic scrolling** - Full-page traversal with consistent results across runs
-- **OCR fallback** - macOS Vision API and Tesseract for inaccessible elements
 - **Notion API validation** - Compare extracted content with API "gold standard"
 - **Multiple modes** - Normal, dry-run, and debug modes
 - **Flexible output** - JSON and CSV exports with comprehensive logging
@@ -40,7 +40,17 @@ Or install in development mode:
 pip install -e .
 ```
 
-3. **Enable Accessibility Permissions:**
+3. **Set up environment variables:**
+```bash
+cp .env.example .env
+# Edit .env and add your API keys (without quotes!):
+# - OPENAI_API_KEY or ANTHROPIC_API_KEY (for AI agent)
+# - NOTION_TOKEN (optional, for API-based extraction)
+```
+
+The `.env` file is automatically loaded by the application - no need to manually export variables!
+
+4. **Enable Accessibility Permissions:**
    - Go to **System Preferences** > **Security & Privacy** > **Privacy** > **Accessibility**
    - Add your terminal application or Python to the list
    - Grant permission

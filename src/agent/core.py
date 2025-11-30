@@ -1,19 +1,26 @@
 """Core LangChain agent for Notion operations."""
 
 import os
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+from dotenv import load_dotenv
+from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
+
+# Load environment variables from .env file
+load_dotenv()
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.memory import ConversationBufferMemory
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_classic.memory import ConversationBufferMemory
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 from ..orchestrator import NotionOrchestrator
 from .state import AgentState
 from .tools import get_notion_tools
 from .callbacks import UserInputCallback, ProgressCallback
+from .computer_use_client import ComputerUseClient
+from .computer_use_tools import get_computer_use_tools
 
 
 SYSTEM_PROMPT = """You are a Notion Extraction Expert assistant. You help users extract and analyze content from their Notion workspace using the macOS Notion app.
@@ -21,22 +28,18 @@ SYSTEM_PROMPT = """You are a Notion Extraction Expert assistant. You help users 
 ## Your Capabilities
 
 You have access to these tools:
-- navigate_to_page: Navigate to a specific page by name
 - extract_page_content: Extract all content from a page (current or named)
 - extract_database: Extract multiple pages from a database
-- list_available_pages: List all pages in the sidebar
-- search_pages: Search for pages by name
 - get_current_context: Check current Notion state and what you've done
 - ask_user: Ask the user for clarification when needed
 
 ## How to Help Users
 
 1. **Understand the Request**: Break down complex requests into steps
-2. **Explore First**: Use list_available_pages or search_pages to find what exists
-3. **Navigate Wisely**: Navigate to pages before extracting them
-4. **Extract Content**: Use extract_page_content or extract_database as appropriate
-5. **Analyze Results**: Summarize extracted content meaningfully
-6. **Ask When Stuck**: Use ask_user if you need database IDs, can't find pages, or need clarification
+2. **Navigate & Interact**: Use mouse and keyboard to navigate Notion
+3. **Extract Content**: Use extract_page_content or extract_database as appropriate
+4. **Analyze Results**: Summarize extracted content meaningfully
+5. **Ask When Stuck**: Use ask_user if you need clarification
 
 ## Notion Structure
 
@@ -47,11 +50,10 @@ You have access to these tools:
 ## Best Practices
 
 - Always check current context before starting
-- List available pages if user's request is vague
+- Navigate using mouse/keyboard when needed
 - Extract databases when user mentions "all" or "multiple" pages
 - Provide summaries, not just raw data
 - Ask for confirmation before large extractions
-- If navigation fails, try searching or ask user for exact name
 
 ## Response Style
 
@@ -64,15 +66,110 @@ You have access to these tools:
 ## Example Interactions
 
 User: "Extract all my recipes"
-You: First, let me check what's available... [uses list_pages or search_pages, then extract_database]
+You: [takes screenshot, locates recipes database, extracts content]
 
 User: "What's on the Roadmap page?"
-You: [uses navigate_to_page, then extract_page_content, then summarizes the content]
+You: [navigates to page, extracts content, summarizes]
 
 User: "How many recipes do I have?"
-You: [uses extract_database with appropriate limit, then counts and reports]
+You: [extracts database with appropriate limit, counts and reports]
 
 Remember: You can see the actual Notion app and interact with it directly. Be proactive and helpful!
+"""
+
+
+COMPUTER_USE_SYSTEM_PROMPT = """You are a Computer Control Expert assistant with Notion extraction capabilities. You can control the computer through mouse clicks, keyboard input, and screenshots to help users extract and analyze content from their Notion workspace.
+
+## Your Capabilities
+
+### Computer Control Tools:
+- take_screenshot: Capture the current screen to see what's visible
+- get_screen_info: Get screen dimensions and display information
+- move_mouse: Move cursor to specific coordinates
+- left_click: Click at coordinates or current position
+- right_click: Right-click (context menu) at coordinates
+- double_click: Double-click at coordinates
+- type_text: Type text at current cursor location
+- press_key: Press special keys (Return, Tab, Escape, arrows, etc.)
+- get_cursor_position: Get current mouse position
+
+### Notion Extraction Tools:
+- extract_page_content: Extract all content from current or named page
+- extract_database: Extract multiple pages from a database
+- get_current_context: Check current extraction state
+- ask_user: Ask the user for clarification when needed
+
+## How to Help Users
+
+1. **Understand the Request**: Break down what the user wants to accomplish
+2. **See the Screen**: Start with take_screenshot to understand current state
+3. **Navigate**: Use mouse clicks and keyboard to navigate Notion
+4. **Extract Content**: Use extraction tools to capture page/database content
+5. **Analyze & Report**: Summarize results meaningfully
+6. **Ask When Stuck**: Use ask_user for clarification
+
+## Computer Control Best Practices
+
+1. **Always Screenshot First**: Before taking actions, take a screenshot to see what's on screen
+2. **Coordinate System**: Screen coordinates start at (0,0) in top-left corner
+3. **Be Precise**: Use exact coordinates from screenshot analysis
+4. **Wait After Actions**: Some actions need time to complete (navigation, loading)
+5. **Verify Success**: Take another screenshot after major actions to confirm
+6. **Sequential Actions**: Break complex tasks into small sequential steps
+
+## Navigation Workflow
+
+1. Take screenshot to see current screen
+2. Identify target UI elements and their coordinates
+3. Click on elements (sidebar items, buttons, links)
+4. Type text if needed (search, filters)
+5. Press keys for special actions (Return, Escape, arrows)
+6. Verify with another screenshot
+
+## Extraction Workflow
+
+1. Navigate to the target page/database
+2. Wait for content to load
+3. Use extract_page_content or extract_database
+4. Summarize the extracted content
+5. Report results to user
+
+## Example Interactions
+
+User: "Extract all my recipes"
+You: 
+- Take screenshot to see current Notion state
+- Identify and click on recipes database in sidebar
+- Wait for database to load
+- Use extract_database to get all recipes
+- Summarize: "Extracted 25 recipes with 340 total blocks"
+
+User: "What's on the Roadmap page?"
+You:
+- Take screenshot
+- Click on Roadmap page in sidebar
+- Wait for page to load
+- Use extract_page_content
+- Summarize key points from the content
+
+User: "Search for pages about meetings"
+You:
+- Take screenshot
+- Click on search box
+- Type "meetings"
+- Press Return
+- Click on relevant results
+- Extract content
+
+## Response Style
+
+- Be concise and clear
+- Explain what you're seeing in screenshots
+- Show progress for multi-step operations
+- Provide meaningful summaries of extracted content
+- If actions fail, explain what went wrong and try alternatives
+
+Remember: You have full computer control. Take screenshots frequently to understand state, and use precise coordinates for reliable interactions!
 """
 
 
@@ -86,7 +183,9 @@ class NotionAgent:
         llm_provider: str = "openai",
         model: Optional[str] = None,
         temperature: float = 0,
-        verbose: bool = False
+        verbose: bool = False,
+        computer_use: bool = False,
+        display_num: int = 1,
     ):
         """Initialize the Notion agent.
         
@@ -97,9 +196,12 @@ class NotionAgent:
             model: Specific model to use (auto-selects if None)
             temperature: LLM temperature (0 = deterministic)
             verbose: Enable verbose logging
+            computer_use: Enable Computer Use API for screen control
+            display_num: Display number for Computer Use (1-based)
         """
         self.verbose = verbose
         self.output_dir = output_dir
+        self.computer_use = computer_use
         
         # Initialize orchestrator
         self.orchestrator = NotionOrchestrator(
@@ -111,11 +213,35 @@ class NotionAgent:
         # Initialize state
         self.state = AgentState()
         
+        # Initialize Computer Use client if enabled
+        self.computer_client = None
+        if computer_use:
+            try:
+                self.computer_client = ComputerUseClient(display_num=display_num)
+            except Exception as e:
+                if verbose:
+                    print(f"Warning: Computer Use initialization failed: {e}")
+                    print("Falling back to standard tools")
+                self.computer_use = False
+        
         # Initialize LLM
         self.llm = self._init_llm(llm_provider, model, temperature)
         
-        # Initialize tools
-        self.tools = get_notion_tools(self.orchestrator, self.state)
+        # Initialize tools (computer use or standard)
+        if self.computer_use and self.computer_client:
+            # Computer use tools + extraction tools
+            from .tools import ExtractPageContentTool, ExtractDatabaseTool, GetCurrentContextTool, AskUserTool
+            computer_tools = get_computer_use_tools(self.computer_client, self.state)
+            extraction_tools = [
+                ExtractPageContentTool(orchestrator=self.orchestrator, state=self.state),
+                ExtractDatabaseTool(orchestrator=self.orchestrator, state=self.state),
+                GetCurrentContextTool(orchestrator=self.orchestrator, state=self.state),
+                AskUserTool(orchestrator=self.orchestrator, state=self.state),
+            ]
+            self.tools = computer_tools + extraction_tools
+        else:
+            # Standard tools
+            self.tools = get_notion_tools(self.orchestrator, self.state)
         
         # Initialize memory
         self.memory = ConversationBufferMemory(
@@ -173,9 +299,12 @@ class NotionAgent:
         Returns:
             AgentExecutor instance
         """
+        # Choose system prompt based on mode
+        system_prompt = COMPUTER_USE_SYSTEM_PROMPT if self.computer_use else SYSTEM_PROMPT
+        
         # Create prompt
         prompt = ChatPromptTemplate.from_messages([
-            ("system", SYSTEM_PROMPT),
+            ("system", system_prompt),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
@@ -240,7 +369,18 @@ class NotionAgent:
         self.memory.clear()
         self.state = AgentState()
         # Reinitialize tools with new state
-        self.tools = get_notion_tools(self.orchestrator, self.state)
+        if self.computer_use and self.computer_client:
+            from .tools import ExtractPageContentTool, ExtractDatabaseTool, GetCurrentContextTool, AskUserTool
+            computer_tools = get_computer_use_tools(self.computer_client, self.state)
+            extraction_tools = [
+                ExtractPageContentTool(orchestrator=self.orchestrator, state=self.state),
+                ExtractDatabaseTool(orchestrator=self.orchestrator, state=self.state),
+                GetCurrentContextTool(orchestrator=self.orchestrator, state=self.state),
+                AskUserTool(orchestrator=self.orchestrator, state=self.state),
+            ]
+            self.tools = computer_tools + extraction_tools
+        else:
+            self.tools = get_notion_tools(self.orchestrator, self.state)
         self.agent_executor = self._create_agent()
     
     def get_state_summary(self) -> str:
@@ -308,7 +448,9 @@ def create_agent(
     model: Optional[str] = None,
     notion_token: Optional[str] = None,
     output_dir: str = "output",
-    verbose: bool = False
+    verbose: bool = False,
+    computer_use: bool = False,
+    display_num: int = 1,
 ) -> NotionAgent:
     """Create a Notion agent instance.
     
@@ -318,6 +460,8 @@ def create_agent(
         notion_token: Optional Notion API token
         output_dir: Output directory
         verbose: Enable verbose logging
+        computer_use: Enable Computer Use API for screen control
+        display_num: Display number for Computer Use (1-based)
         
     Returns:
         NotionAgent instance
@@ -327,6 +471,8 @@ def create_agent(
         output_dir=output_dir,
         llm_provider=llm_provider,
         model=model,
-        verbose=verbose
+        verbose=verbose,
+        computer_use=computer_use,
+        display_num=display_num,
     )
 

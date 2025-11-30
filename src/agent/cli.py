@@ -4,6 +4,10 @@ import sys
 import os
 import click
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from .core import create_agent
 
@@ -25,8 +29,15 @@ from .core import create_agent
               help='Output directory (default: output)')
 @click.option('--verbose', '-v', is_flag=True,
               help='Enable verbose logging')
+@click.option('--computer-use', '-c', is_flag=True,
+              help='Enable Computer Use API for screen control (requires Anthropic)')
+@click.option('--display', '-d',
+              type=int,
+              default=1,
+              help='Display number for Computer Use (default: 1)')
 @click.pass_context
-def cli(ctx, query, interactive, provider, model, notion_token, output_dir, verbose):
+def cli(ctx, query, interactive, provider, model, notion_token, output_dir, verbose, 
+        computer_use, display):
     """Notion Agent - Intelligent extraction assistant.
     
     Examples:
@@ -36,6 +47,9 @@ def cli(ctx, query, interactive, provider, model, notion_token, output_dir, verb
         
         # Interactive mode
         python -m src.agent --interactive
+        
+        # With Computer Use (screen control via clicks/keyboard)
+        python -m src.agent --computer-use "navigate to recipes and extract"
         
         # With specific model
         python -m src.agent --provider anthropic "what's on the roadmap page?"
@@ -54,6 +68,15 @@ def cli(ctx, query, interactive, provider, model, notion_token, output_dir, verb
         click.echo("   Set it with: export ANTHROPIC_API_KEY='your-key'")
         sys.exit(1)
     
+    # Validate Computer Use requirements
+    if computer_use:
+        if not os.environ.get('ANTHROPIC_API_KEY'):
+            click.echo("❌ Error: Computer Use requires ANTHROPIC_API_KEY")
+            click.echo("   Set it with: export ANTHROPIC_API_KEY='your-key'")
+            sys.exit(1)
+        if verbose:
+            click.echo(f"🖥️  Computer Use enabled (display {display})")
+    
     # Create agent
     try:
         agent = create_agent(
@@ -61,7 +84,9 @@ def cli(ctx, query, interactive, provider, model, notion_token, output_dir, verb
             model=model,
             notion_token=notion_token,
             output_dir=output_dir,
-            verbose=verbose
+            verbose=verbose,
+            computer_use=computer_use,
+            display_num=display,
         )
     except Exception as e:
         click.echo(f"❌ Failed to initialize agent: {e}")
@@ -102,14 +127,20 @@ def cli(ctx, query, interactive, provider, model, notion_token, output_dir, verb
 @click.option('--notion-token', envvar='NOTION_TOKEN')
 @click.option('--output-dir', '-o', default='output')
 @click.option('--verbose', '-v', is_flag=True)
-def interactive(provider, model, notion_token, output_dir, verbose):
+@click.option('--computer-use', '-c', is_flag=True,
+              help='Enable Computer Use API for screen control')
+@click.option('--display', '-d', type=int, default=1,
+              help='Display number for Computer Use')
+def interactive(provider, model, notion_token, output_dir, verbose, computer_use, display):
     """Start interactive chat mode."""
     agent = create_agent(
         llm_provider=provider,
         model=model,
         notion_token=notion_token,
         output_dir=output_dir,
-        verbose=verbose
+        verbose=verbose,
+        computer_use=computer_use,
+        display_num=display,
     )
     
     agent.interactive_mode()
@@ -124,14 +155,20 @@ def interactive(provider, model, notion_token, output_dir, verbose):
 @click.option('--notion-token', envvar='NOTION_TOKEN')
 @click.option('--output-dir', '-o', default='output')
 @click.option('--verbose', '-v', is_flag=True)
-def ask(query, provider, model, notion_token, output_dir, verbose):
+@click.option('--computer-use', '-c', is_flag=True,
+              help='Enable Computer Use API for screen control')
+@click.option('--display', '-d', type=int, default=1,
+              help='Display number for Computer Use')
+def ask(query, provider, model, notion_token, output_dir, verbose, computer_use, display):
     """Ask the agent a single question."""
     agent = create_agent(
         llm_provider=provider,
         model=model,
         notion_token=notion_token,
         output_dir=output_dir,
-        verbose=verbose
+        verbose=verbose,
+        computer_use=computer_use,
+        display_num=display,
     )
     
     click.echo(f"\n📝 Query: {query}\n")
@@ -157,13 +194,10 @@ Database Operations:
   python -m src.agent "extract 20 pages from my recipe database"
   python -m src.agent "how many recipes do I have?"
   
-Navigation:
-  python -m src.agent "go to the project roadmap page"
-  python -m src.agent "list all available pages"
-  
-Search:
-  python -m src.agent "find pages about python"
-  python -m src.agent "show me pages with 'meeting' in the title"
+Computer Use Mode (Screen Control):
+  python -m src.agent --computer-use "click on the recipes database"
+  python -m src.agent -c "navigate to roadmap page and extract it"
+  python -m src.agent --computer-use -i  # Interactive with screen control
 
 Interactive Mode:
   python -m src.agent --interactive
@@ -178,7 +212,7 @@ Verbose Mode (see tool calls):
 
 Environment Variables:
   export OPENAI_API_KEY="sk-..."
-  export ANTHROPIC_API_KEY="sk-ant-..."
+  export ANTHROPIC_API_KEY="sk-ant-..."  # Required for --computer-use
   export NOTION_TOKEN="secret_..."
 
 ======================================================================

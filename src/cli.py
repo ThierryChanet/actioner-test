@@ -4,6 +4,10 @@ import click
 import time
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from .ax.client import AXClient
 from .notion.detector import NotionDetector

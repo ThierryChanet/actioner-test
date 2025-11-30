@@ -176,10 +176,27 @@ class NotionOrchestrator:
             if not self.ensure_notion_active():
                 return []
             
+            # Try to get sidebar pages
             pages = self.navigator.get_sidebar_pages()
-            return [{"name": p["name"]} for p in pages]
+            if pages:
+                return [{"name": p["name"]} for p in pages]
+            
+            # Fallback: if sidebar not accessible, return current page
+            current_title = self.get_current_page_title()
+            if current_title:
+                self.logger.info(f"Sidebar not accessible, using current page: {current_title}")
+                return [{"name": current_title, "current": True}]
+            
+            return []
         except Exception as e:
             self.logger.error(f"Failed to list pages: {e}")
+            # Try to at least report current page
+            try:
+                current_title = self.get_current_page_title()
+                if current_title:
+                    return [{"name": current_title, "current": True}]
+            except:
+                pass
             return []
     
     def navigate_to_page(
@@ -205,10 +222,10 @@ class NotionOrchestrator:
             self.logger.info(f"Already on page: {current_title}")
             return True
         
-        # Try methods in order of reliability
+        # Try methods in order of reliability (OCR first as it's more reliable)
         methods = [method] if method else [
-            ExtractionMethod.AX,
             ExtractionMethod.OCR,
+            ExtractionMethod.AX,
         ]
         
         for m in methods:

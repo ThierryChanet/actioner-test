@@ -194,15 +194,33 @@ class ListPagesTool(BaseTool):
         pages = self.orchestrator.list_available_pages()
         
         if not pages:
-            return "No pages found in sidebar. Make sure Notion is open."
+            return json.dumps({
+                "status": "sidebar_not_accessible",
+                "message": "Sidebar not accessible. You can still extract content from the currently visible page using extract_page_content without a page_name.",
+                "suggestion": "Use get_current_context to see what page is currently open, or extract_page_content() to extract the visible page."
+            }, indent=2)
         
         # Cache in state
         self.state.available_pages = [p["name"] for p in pages]
         
-        output = {
-            "total_pages": len(pages),
-            "pages": [p["name"] for p in pages]
-        }
+        # Check if any page is marked as current
+        current_pages = [p for p in pages if p.get("current")]
+        
+        if current_pages:
+            output = {
+                "status": "current_page_only",
+                "message": "Sidebar not accessible, but current page detected",
+                "current_page": current_pages[0]["name"],
+                "total_pages": len(pages),
+                "pages": [p["name"] for p in pages],
+                "suggestion": "You can extract this page directly with extract_page_content()"
+            }
+        else:
+            output = {
+                "status": "success",
+                "total_pages": len(pages),
+                "pages": [p["name"] for p in pages]
+            }
         
         return json.dumps(output, indent=2)
 
