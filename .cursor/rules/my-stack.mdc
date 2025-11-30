@@ -1,0 +1,10 @@
+# Technical Stack
+
+- Python for the backend
+- html/js for the front end
+- Notion as the database
+- Clickhouse if needing a local database for backend purposes
+- Python Tests
+---
+alwaysApply: true
+---
