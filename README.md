@@ -4,6 +4,7 @@ A macOS tool that extracts text content from the Notion desktop app using **dire
 
 ## Features
 
+- **🤖 AI Agent (NEW!)** - Natural language interface powered by LangChain - ask questions in plain English!
 - **Direct AX-based text extraction** - Uses macOS Accessibility APIs for reliable content capture
 - **Database extraction (AX Navigation)** - Click through database rows to extract pages - **no API token needed!**
 - **Database extraction (API)** - Fast bulk extraction using Notion API
@@ -46,7 +47,32 @@ pip install -e .
 
 ## Quick Start
 
-### Extract a Single Page
+### 🤖 NEW: Use the AI Agent (Recommended)
+
+Ask questions in natural language:
+
+```bash
+# Set your API key first
+export OPENAI_API_KEY="sk-..."
+
+# Ask questions in plain English
+python -m src.agent "extract all recipes from my database"
+python -m src.agent "what's on the roadmap page?"
+python -m src.agent "how many recipes do I have?"
+
+# Interactive mode
+python -m src.agent --interactive
+```
+
+**📖 See [docs/agent/](docs/agent/) for complete agent documentation:**
+- [Get Started (2 min)](docs/agent/GET_STARTED.md)
+- [Quick Start (5 min)](docs/agent/AGENT_QUICKSTART.md)
+- [Full Documentation](docs/agent/AGENT_README.md)
+- [Example Queries](docs/agent/AGENT_QUERIES.md)
+
+---
+
+### Classic CLI: Extract a Single Page
 
 ```bash
 python -m src.cli extract "Project Roadmap"
@@ -80,7 +106,7 @@ python -m src.cli validate "Project Roadmap" --page-id "your-page-id"
 python -m src.cli extract-database-ax --limit 10
 ```
 
-**📖 See [DATABASE_AX_EXTRACTION.md](DATABASE_AX_EXTRACTION.md)** - Extracts by clicking through rows
+**📖 See [docs/extraction/DATABASE_AX_EXTRACTION.md](docs/extraction/DATABASE_AX_EXTRACTION.md)** - Extracts by clicking through rows
 
 #### Method 2: API-based (Faster for bulk extraction)
 
@@ -89,7 +115,7 @@ export NOTION_TOKEN="your_notion_api_token"
 python -m src.cli extract-database "your-database-id" --limit 10
 ```
 
-**📖 See [DATABASE_EXTRACTION.md](DATABASE_EXTRACTION.md)** - Direct API access
+**📖 See [docs/extraction/DATABASE_EXTRACTION.md](docs/extraction/DATABASE_EXTRACTION.md)** - Direct API access
 
 ## Usage
 
@@ -179,7 +205,7 @@ python -m src.cli extract-database "abc123def456" --limit 20 --output both
 python -m src.cli --verbose extract-database "abc123def456"
 ```
 
-**See [DATABASE_EXTRACTION.md](DATABASE_EXTRACTION.md) for complete guide.**
+**See [docs/extraction/DATABASE_EXTRACTION.md](docs/extraction/DATABASE_EXTRACTION.md) for complete guide.**
 
 #### `extract-database-ax`
 
@@ -203,7 +229,7 @@ python -m src.cli --verbose extract-database-ax --limit 5 --output both
 python -m src.cli extract-database-ax --limit 10 --navigation-delay 0.5
 ```
 
-**See [DATABASE_AX_EXTRACTION.md](DATABASE_AX_EXTRACTION.md) for complete guide.**
+**See [docs/extraction/DATABASE_AX_EXTRACTION.md](docs/extraction/DATABASE_AX_EXTRACTION.md) for complete guide.**
 
 #### `list-database-rows`
 
@@ -470,6 +496,17 @@ Contributions are welcome! Please:
 3. Add tests for new functionality
 4. Submit a pull request
 
+## Documentation
+
+- **[Agent Documentation](docs/agent/)** - Natural language AI agent
+- **[Extraction Methods](docs/extraction/)** - AX, API, OCR extraction guides  
+- **[Setup Guides](docs/guides/)** - Permissions, debugging, quick starts
+- **[Examples](examples/)** - Code examples
+- **[Repository Structure](REPOSITORY_STRUCTURE.md)** - Complete directory guide
+- **[Contributing](CONTRIBUTING.md)** - Contribution guidelines
+
+📖 **[Browse all documentation](docs/)** | 🗂️ **[Repository structure](REPOSITORY_STRUCTURE.md)**
+
 ## Support
 
 For issues, questions, or feature requests, please open an issue on GitHub.
@@ -478,6 +515,7 @@ For issues, questions, or feature requests, please open an issue on GitHub.
 
 - Built with PyObjC for macOS Accessibility API access
 - Uses notion-client for API validation
+- LangChain for AI agent functionality
 - Inspired by the need for reliable, deterministic content extraction
 
 ---

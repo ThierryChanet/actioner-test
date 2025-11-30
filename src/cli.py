@@ -1498,15 +1498,19 @@ def extract_database_keyboard(ctx, limit, tabs_to_first, output, no_ocr):
 
 @cli.command()
 @click.argument('recipe_name', required=False)
+@click.option('--fuzzy-threshold', default=0.75, type=float,
+              help='Fuzzy matching threshold (0.0-1.0, default: 0.75)')
 @click.pass_context
-def test_ocr_click(ctx, recipe_name):
+def test_ocr_click(ctx, recipe_name, fuzzy_threshold):
     """Test OCR-based clicking - screenshot database, find recipe names, click them.
     
     This uses OCR to find text on screen and click it!
+    Uses fuzzy matching to handle OCR errors and typos.
     
     Examples:
         python -m src.cli test-ocr-click
         python -m src.cli test-ocr-click "Topinambours"
+        python -m src.cli test-ocr-click "Aheebakjan" --fuzzy-threshold 0.70
     """
     logger = ctx.obj['logger']
     
@@ -1531,18 +1535,38 @@ def test_ocr_click(ctx, recipe_name):
         if recipe_name:
             # Search for specific recipe
             print(f"🔍 Looking for: {recipe_name}\n")
-            success = ocr_nav.find_and_click_text(recipe_name, delay=1.5)
+            success = ocr_nav.find_and_click_text(
+                recipe_name, 
+                delay=1.5,
+                fuzzy=True,
+                fuzzy_threshold=fuzzy_threshold
+            )
             
             if success:
+                # Wait a bit for the page to fully expand
+                print("\n⏳ Waiting for page to fully load...")
+                time.sleep(2.0)
+                
                 new_title = detector.get_page_title()
+                print(f"📄 Current page title: {new_title}")
+                
                 if new_title != database_title:
-                    print(f"\n🎉 SUCCESS! Opened: {new_title}")
+                    print(f"🎉 SUCCESS! Page opened and expanded!")
+                    print(f"   Database: {database_title}")
+                    print(f"   Recipe: {new_title}")
+                    
+                    # Show that we can now extract content
+                    print("\n✅ Page is ready for content extraction")
                     
                     # Go back
-                    print("🔙 Going back...")
+                    print("\n🔙 Going back to database...")
                     navigator.navigate_back(wait_for_load=True)
                 else:
-                    print("\n⚠️  Clicked but page didn't change")
+                    print(f"\n⚠️  Page title unchanged (still: {database_title})")
+                    print("   This might be expected for side panel views.")
+                    print("   The page should still be accessible for extraction.")
+            else:
+                print("\n❌ Click failed")
             
             return
         
@@ -1612,6 +1636,133 @@ def test_ocr_click(ctx, recipe_name):
         
     except Exception as e:
         logger.error(f"Test failed: {e}")
+        if ctx.obj['verbose']:
+            import traceback
+            traceback.print_exc()
+
+
+@cli.command()
+@click.argument('recipe_name')
+@click.option('--output', type=click.Choice(['json', 'csv', 'both']), default='json',
+              help='Output format')
+@click.option('--no-ocr', is_flag=True, help='Disable OCR fallback for extraction')
+@click.option('--go-back', is_flag=True, help='Navigate back to database after extraction')
+@click.option('--fuzzy-threshold', default=0.75, type=float,
+              help='Fuzzy matching threshold for finding recipes (0.0-1.0, default: 0.75)')
+@click.pass_context
+def extract_with_ocr_nav(ctx, recipe_name, output, no_ocr, go_back, fuzzy_threshold):
+    """Extract recipe content using OCR navigation.
+    
+    This command uses OCR to find and click on a recipe in the database,
+    then extracts all its content. No API token needed!
+    
+    Fuzzy matching helps handle OCR errors and typos in recipe names.
+    Lower threshold = more lenient matching.
+    
+    Examples:
+        python -m src.cli extract-with-ocr-nav "Topinambours au vinaigre"
+        python -m src.cli extract-with-ocr-nav "Thai omelet" --output both
+        python -m src.cli extract-with-ocr-nav "Aheebakjan" --fuzzy-threshold 0.70
+    """
+    logger = ctx.obj['logger']
+    output_dir = ctx.obj['output_dir']
+    
+    try:
+        print("\n" + "="*70)
+        print("OCR-BASED RECIPE EXTRACTION")
+        print("="*70)
+        print(f"Recipe: {recipe_name}")
+        print(f"Output: {output}")
+        print("="*70 + "\n")
+        
+        # Initialize components
+        ax_client = AXClient()
+        detector = NotionDetector(ax_client)
+        ocr_nav = OCRNavigator(detector)
+        navigator = NotionNavigator(detector)
+        extractor = NotionExtractor(detector)
+        
+        # Setup OCR for extraction if enabled
+        if not no_ocr:
+            ocr_handler = OCRHandler()
+            if ocr_handler.is_available():
+                extractor.set_ocr_handler(ocr_handler)
+                logger.info(f"OCR enabled for extraction: {ocr_handler.get_active_handler()}")
+        
+        # Activate Notion
+        if not detector.ensure_notion_active():
+            logger.error("Notion not found")
+            return
+        
+        database_title = detector.get_page_title()
+        logger.info(f"Starting from database: {database_title}")
+        
+        # Use OCR to navigate to the recipe
+        print(f"🔍 Navigating to recipe using OCR...")
+        success = ocr_nav.find_and_click_text(
+            recipe_name, 
+            delay=1.5,
+            fuzzy=True,
+            fuzzy_threshold=fuzzy_threshold
+        )
+        
+        if not success:
+            logger.error(f"Failed to navigate to recipe: {recipe_name}")
+            print("\n❌ Could not find or click on the recipe")
+            return
+        
+        # Wait for page to load and stabilize
+        print("⏳ Waiting for page to load...")
+        time.sleep(2.0)
+        detector.wait_for_page_load()
+        
+        current_title = detector.get_page_title()
+        logger.info(f"Current page: {current_title}")
+        
+        print(f"📄 Now on page: {current_title}")
+        
+        # Extract content
+        print(f"\n📝 Extracting content...")
+        start_time = time.time()
+        logger.log_extraction_start(recipe_name)
+        
+        result = extractor.extract_page(use_ocr=not no_ocr)
+        
+        duration = time.time() - start_time
+        logger.log_extraction_complete(recipe_name, len(result.blocks), duration)
+        
+        print(f"✅ Extracted {len(result.blocks)} blocks in {duration:.1f}s")
+        
+        # Write output
+        if output in ['json', 'both']:
+            json_writer = JSONWriter(output_dir)
+            json_path = json_writer.write_extraction(result)
+            logger.info(f"JSON written to: {json_path}")
+            print(f"💾 JSON: {json_path}")
+        
+        if output in ['csv', 'both']:
+            csv_writer = CSVWriter(output_dir)
+            csv_path = csv_writer.write_extraction(result)
+            logger.info(f"CSV written to: {csv_path}")
+            print(f"💾 CSV: {csv_path}")
+        
+        # Go back to database if requested
+        if go_back:
+            print(f"\n🔙 Navigating back to database...")
+            navigator.navigate_back(wait_for_load=True)
+            print(f"✅ Back to: {detector.get_page_title()}")
+        
+        print("\n" + "="*70)
+        print("EXTRACTION COMPLETE")
+        print("="*70)
+        print(f"Recipe: {recipe_name}")
+        print(f"Blocks extracted: {len(result.blocks)}")
+        print(f"Duration: {duration:.1f}s")
+        print(f"Output directory: {output_dir}")
+        print("="*70 + "\n")
+        
+    except Exception as e:
+        logger.error(f"Extraction failed: {e}")
         if ctx.obj['verbose']:
             import traceback
             traceback.print_exc()

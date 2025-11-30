@@ -4,6 +4,7 @@ import time
 import Quartz
 import Cocoa
 from typing import List, Tuple, Optional, Dict
+from difflib import SequenceMatcher
 from ..ocr.vision import VisionOCR
 from ..ocr.fallback import OCRHandler
 from .detector import NotionDetector
@@ -24,6 +25,31 @@ class OCRNavigator:
             # Fallback to Tesseract
             ocr_handler = OCRHandler()
             self.ocr = ocr_handler.tesseract if ocr_handler.tesseract_available else None
+    
+    def fuzzy_match(self, text1: str, text2: str, threshold: float = 0.8) -> bool:
+        """Check if two strings are similar enough (fuzzy matching).
+        
+        This helps handle OCR errors and typos in recipe names.
+        
+        Args:
+            text1: First string
+            text2: Second string
+            threshold: Minimum similarity ratio (0-1)
+            
+        Returns:
+            True if strings are similar enough
+        """
+        # Normalize: lowercase and remove extra whitespace
+        s1 = ' '.join(text1.lower().split())
+        s2 = ' '.join(text2.lower().split())
+        
+        # Check if one contains the other
+        if s1 in s2 or s2 in s1:
+            return True
+        
+        # Calculate similarity ratio
+        ratio = SequenceMatcher(None, s1, s2).ratio()
+        return ratio >= threshold
     
     def screenshot_region(self, x: int, y: int, width: int, height: int) -> Optional[str]:
         """Take screenshot of a screen region and save to temp file.
@@ -153,13 +179,17 @@ class OCRNavigator:
     def find_text_on_screen(
         self,
         search_terms: Optional[List[str]] = None,
-        min_confidence: float = 0.5
+        min_confidence: float = 0.5,
+        fuzzy: bool = True,
+        fuzzy_threshold: float = 0.75
     ) -> List[Dict]:
         """Find text elements on screen using OCR.
         
         Args:
             search_terms: Optional list of specific terms to find
             min_confidence: Minimum OCR confidence (0-1)
+            fuzzy: Enable fuzzy matching for search terms
+            fuzzy_threshold: Minimum similarity for fuzzy match (0-1)
             
         Returns:
             List of dicts with 'text', 'x', 'y', 'width', 'height', 'confidence'
@@ -204,7 +234,19 @@ class OCRNavigator:
             
             # If searching for specific terms
             if search_terms:
-                if not any(term.lower() in text.lower() for term in search_terms):
+                match_found = False
+                
+                if fuzzy:
+                    # Use fuzzy matching to handle OCR errors and typos
+                    for term in search_terms:
+                        if self.fuzzy_match(text, term, threshold=fuzzy_threshold):
+                            match_found = True
+                            break
+                else:
+                    # Exact substring matching
+                    match_found = any(term.lower() in text.lower() for term in search_terms)
+                
+                if not match_found:
                     continue
             
             # Convert image coordinates to screen coordinates
@@ -282,22 +324,40 @@ class OCRNavigator:
             print(f"❌ Click failed: {e}")
             return False
     
-    def find_and_click_text(self, text: str, delay: float = 1.0) -> bool:
+    def find_and_click_text(
+        self, 
+        text: str, 
+        delay: float = 1.0,
+        fuzzy: bool = True,
+        fuzzy_threshold: float = 0.75
+    ) -> bool:
         """Find text on screen, hover over it to reveal OPEN button, then click OPEN.
+        
+        Uses fuzzy matching to handle OCR errors and typos.
         
         Args:
             text: Text to search for (recipe name)
             delay: Delay after click
+            fuzzy: Enable fuzzy matching (default: True)
+            fuzzy_threshold: Minimum similarity for fuzzy match (0-1, default: 0.75)
             
         Returns:
             True if found and clicked
         """
         print(f"🔍 Searching for: {text}")
+        if fuzzy:
+            print(f"   (using fuzzy matching, threshold: {fuzzy_threshold})")
         
-        items = self.find_text_on_screen(search_terms=[text])
+        items = self.find_text_on_screen(
+            search_terms=[text],
+            fuzzy=fuzzy,
+            fuzzy_threshold=fuzzy_threshold
+        )
         
         if not items:
             print(f"  ❌ Not found")
+            if fuzzy:
+                print(f"  💡 Try: lowering threshold, checking spelling, or scrolling to show the item")
             return False
         
         # Found the recipe - hover over it to reveal OPEN button
@@ -305,7 +365,12 @@ class OCRNavigator:
         hover_x = int(item['x'] + item['width'] / 2)
         hover_y = int(item['y'] + item['height'] / 2)
         
-        print(f"  ✅ Found at ({hover_x}, {hover_y})")
+        # Show what was actually matched (in case of fuzzy match)
+        matched_text = item['text']
+        if matched_text.lower() != text.lower():
+            print(f"  ✅ Found similar: '{matched_text}' at ({hover_x}, {hover_y})")
+        else:
+            print(f"  ✅ Found at ({hover_x}, {hover_y})")
         print(f"  🖱️  Hovering to reveal OPEN button...")
         
         # Move mouse to recipe to trigger hover state
@@ -328,7 +393,11 @@ class OCRNavigator:
         
         if not open_items:
             print(f"  ⚠️  OPEN button not found, clicking recipe name instead")
-            return self.click_at_position(hover_x, hover_y, delay)
+            success = self.click_at_position(hover_x, hover_y, delay)
+            if success:
+                time.sleep(1.0)
+                self.expand_side_panel_to_full_page(delay=0.5)
+            return success
         
         # Find OPEN button closest to the recipe (should be on same row)
         # Filter to buttons that are roughly on the same Y coordinate (within 50 pixels)
@@ -339,7 +408,11 @@ class OCRNavigator:
         
         if not nearby_opens:
             print(f"  ⚠️  OPEN button not on same row, clicking recipe name instead")
-            return self.click_at_position(hover_x, hover_y, delay)
+            success = self.click_at_position(hover_x, hover_y, delay)
+            if success:
+                time.sleep(1.0)
+                self.expand_side_panel_to_full_page(delay=0.5)
+            return success
         
         # Click the OPEN button
         open_btn = nearby_opens[0]
@@ -349,7 +422,74 @@ class OCRNavigator:
         print(f"  ✅ Found OPEN button at ({click_x}, {click_y})")
         print(f"  🖱️  Clicking OPEN...")
         
-        return self.click_at_position(click_x, click_y, delay)
+        success = self.click_at_position(click_x, click_y, delay)
+        
+        if success:
+            # After clicking OPEN, the page opens in a side panel
+            # We need to expand it to full page view
+            time.sleep(1.0)  # Wait for side panel to appear
+            self.expand_side_panel_to_full_page(delay=0.5)
+        
+        return success
+    
+    def expand_side_panel_to_full_page(self, delay: float = 1.0) -> bool:
+        """Expand Notion's side panel (peek view) to full page view.
+        
+        When clicking on a database row with OPEN, it opens in a side panel.
+        This function clicks in the center of the content to expand it to full width.
+        
+        Args:
+            delay: Delay after expansion
+            
+        Returns:
+            True if successful
+        """
+        print(f"  📏 Expanding side panel to full page...")
+        
+        # Strategy: Click somewhere in the middle-right area of the screen
+        # where the side panel content is displayed
+        # This triggers Notion to expand the panel to full width
+        
+        # Get window bounds
+        notion_pid = self.detector.notion_pid
+        if not notion_pid:
+            return False
+        
+        window_list = Quartz.CGWindowListCopyWindowInfo(
+            Quartz.kCGWindowListOptionOnScreenOnly,
+            Quartz.kCGNullWindowID
+        )
+        
+        notion_window = None
+        for window in window_list:
+            if window.get('kCGWindowOwnerPID') == notion_pid:
+                bounds = window.get('kCGWindowBounds')
+                if bounds and bounds.get('Width', 0) > 400:
+                    notion_window = window
+                    break
+        
+        if not notion_window:
+            return False
+        
+        bounds = notion_window.get('kCGWindowBounds')
+        win_x = int(bounds['X'])
+        win_y = int(bounds['Y'])
+        win_width = int(bounds['Width'])
+        win_height = int(bounds['Height'])
+        
+        # Click in the middle-right area (where side panel content is)
+        # Typically the side panel is on the right 60% of the window
+        click_x = win_x + int(win_width * 0.7)  # 70% across
+        click_y = win_y + int(win_height * 0.3)  # 30% down
+        
+        print(f"  🖱️  Clicking at ({click_x}, {click_y}) to expand...")
+        
+        success = self.click_at_position(click_x, click_y, delay)
+        
+        if success:
+            print(f"  ✅ Side panel should now be expanded")
+        
+        return success
     
     def scan_database_rows(self) -> List[Dict]:
         """Scan database view and find all visible recipe names.

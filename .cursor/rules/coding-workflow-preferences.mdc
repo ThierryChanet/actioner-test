@@ -4,6 +4,7 @@
 - Do not touch code that is unrelated to the task
 - Write thorough tests for all major functionality
 - Avoid making major changes to the patterns and architecture of how a feature works, after it has shown to work well, unless explicitly instructed
+- Always think about the sobriety and cost-efficiency before attempting and interaction, in order to save time, energy and money
 - Always think about what other methods and areas of code might be affected by code changes
 
 ---

@@ -1,8 +1,28 @@
 # Examples
 
-This directory contains example scripts demonstrating database extraction.
+This directory contains example scripts demonstrating various extraction methods.
 
 ## Available Examples
+
+### 0. Agent Usage (`agent_usage.py`) ⭐ NEWEST!
+
+Programmatic usage of the LangChain AI agent:
+
+```bash
+# Set your API key first
+export OPENAI_API_KEY="sk-..."
+
+# Run the example
+python examples/agent_usage.py
+```
+
+Features:
+- Natural language queries
+- Multi-turn conversations
+- State management
+- Various configuration examples
+
+**See [../docs/agent/](../docs/agent/) for more agent documentation.**
 
 ### 1. AX-Based Database Extraction (`extract_database_with_ax.py`) ⭐ NEW!
 
@@ -91,9 +111,15 @@ output_dir='my_exports'
 
 ## More Examples
 
-See [USAGE_EXAMPLES.md](../USAGE_EXAMPLES.md) for more detailed examples including:
+See [../docs/extraction/USAGE_EXAMPLES.md](../docs/extraction/USAGE_EXAMPLES.md) for more detailed examples including:
 - Export to Markdown
 - Build search indexes
 - Content analysis
 - Batch processing
+
+## Documentation
+
+- **[Agent Documentation](../docs/agent/)** - AI agent usage
+- **[Extraction Methods](../docs/extraction/)** - Database extraction guides
+- **[Setup Guides](../docs/guides/)** - Configuration and troubleshooting
 
