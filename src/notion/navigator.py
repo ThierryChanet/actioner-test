@@ -359,4 +359,175 @@ class NotionNavigator:
             "title": self.detector.get_page_title() or "Unknown",
             "loading": self.detector.is_loading(),
         }
+    
+    def get_database_rows(self) -> List[Dict[str, any]]:
+        """Get clickable rows from the current database view.
+        
+        Returns:
+            List of dicts with row info (title, element)
+        """
+        content_area = self.detector.get_content_area()
+        if not content_area:
+            return []
+        
+        rows = []
+        
+        # Look for table rows first
+        from ..ax.utils import find_elements_by_role
+        row_elements = find_elements_by_role(content_area, "AXRow", max_depth=20)
+        
+        for row in row_elements:
+            # Try to get row title/name
+            title = row.title or row.get_text_content()
+            
+            # Skip rows without meaningful content
+            if not title or len(title.strip()) == 0:
+                continue
+            
+            # Check if row is clickable (has press action or contains links)
+            actions = row.get_actions()
+            has_press = "AXPress" in actions
+            
+            # If row itself isn't clickable, look for links within it
+            if not has_press:
+                links = find_elements_by_role(row, "AXLink", max_depth=3)
+                if links:
+                    # Use first link in row
+                    row_element = links[0]
+                    title = links[0].title or links[0].get_text_content() or title
+                else:
+                    # Try buttons within row
+                    buttons = find_elements_by_role(row, "AXButton", max_depth=3)
+                    if buttons:
+                        row_element = buttons[0]
+                        title = buttons[0].title or buttons[0].get_text_content() or title
+                    else:
+                        # Row not clickable, skip it
+                        continue
+            else:
+                row_element = row
+            
+            rows.append({
+                "title": title.strip(),
+                "element": row_element,
+            })
+        
+        # If no rows found with AXRow role, try looking for links in content
+        if not rows:
+            links = find_elements_by_role(content_area, "AXLink", max_depth=15)
+            for link in links:
+                title = link.title or link.get_text_content()
+                if title and len(title.strip()) > 0:
+                    rows.append({
+                        "title": title.strip(),
+                        "element": link,
+                    })
+        
+        return rows
+    
+    def navigate_to_database_row(
+        self,
+        row_index: int,
+        wait_for_load: bool = True,
+        timeout: float = 10.0
+    ) -> bool:
+        """Navigate to a specific database row by index.
+        
+        Args:
+            row_index: Zero-based index of the row
+            wait_for_load: Whether to wait for page to load
+            timeout: Maximum time to wait (seconds)
+            
+        Returns:
+            True if navigation successful
+        """
+        rows = self.get_database_rows()
+        
+        if row_index < 0 or row_index >= len(rows):
+            return False
+        
+        # Get current title to detect change
+        old_title = self.detector.get_page_title()
+        
+        # Click the row element
+        element = rows[row_index]["element"]
+        success = element.press()
+        
+        if not success:
+            # Try to focus and press
+            element.set_focused(True)
+            time.sleep(0.1)
+            success = element.press()
+        
+        if not success:
+            return False
+        
+        if wait_for_load:
+            # Wait for title to change
+            new_title = self.detector.wait_for_title_change(
+                old_title, timeout=timeout
+            )
+            if not new_title:
+                return False
+            
+            # Wait for page to finish loading
+            return self.detector.wait_for_page_load(timeout=timeout)
+        
+        return True
+    
+    def navigate_to_database_row_by_title(
+        self,
+        row_title: str,
+        wait_for_load: bool = True,
+        timeout: float = 10.0
+    ) -> bool:
+        """Navigate to a database row by its title.
+        
+        Args:
+            row_title: Title/name of the row to navigate to
+            wait_for_load: Whether to wait for page to load
+            timeout: Maximum time to wait (seconds)
+            
+        Returns:
+            True if navigation successful
+        """
+        rows = self.get_database_rows()
+        target_row = None
+        
+        for row in rows:
+            if row["title"].lower() == row_title.lower():
+                target_row = row
+                break
+        
+        if not target_row:
+            return False
+        
+        # Get current title to detect change
+        old_title = self.detector.get_page_title()
+        
+        # Click the row element
+        element = target_row["element"]
+        success = element.press()
+        
+        if not success:
+            # Try to focus and press
+            element.set_focused(True)
+            time.sleep(0.1)
+            success = element.press()
+        
+        if not success:
+            return False
+        
+        if wait_for_load:
+            # Wait for title to change
+            new_title = self.detector.wait_for_title_change(
+                old_title, timeout=timeout
+            )
+            if not new_title:
+                return False
+            
+            # Wait for page to finish loading
+            return self.detector.wait_for_page_load(timeout=timeout)
+        
+        return True
 

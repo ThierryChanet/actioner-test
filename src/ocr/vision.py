@@ -160,6 +160,108 @@ class VisionOCR:
         else:
             self.recognition_level = Vision.VNRequestTextRecognitionLevelFast
 
+    def extract_text(self, image_path: str) -> Optional[str]:
+        """Extract text from an image file.
+        
+        Args:
+            image_path: Path to image file
+            
+        Returns:
+            Extracted text or None
+        """
+        try:
+            image = Cocoa.NSImage.alloc().initWithContentsOfFile_(image_path)
+            if not image:
+                return None
+            return self._recognize_text(image)
+        except:
+            return None
+    
+    def extract_text_with_positions(self, image_path: str) -> list:
+        """Extract text with bounding box positions.
+        
+        Args:
+            image_path: Path to image file
+            
+        Returns:
+            List of dicts with 'text', 'bbox' (x, y, w, h), 'confidence'
+        """
+        try:
+            # Load image
+            image = Cocoa.NSImage.alloc().initWithContentsOfFile_(image_path)
+            if not image:
+                return []
+            
+            # Get CGImage
+            image_data = image.TIFFRepresentation()
+            bitmap = Cocoa.NSBitmapImageRep.imageRepWithData_(image_data)
+            cg_image = bitmap.CGImage()
+            
+            if not cg_image:
+                return []
+            
+            # Get image dimensions - USE CGIMAGE DIMENSIONS, NOT NSIMAGE
+            # NSImage.size() returns logical points, CGImage has actual pixels
+            # This is critical for Retina displays where scale factor != 1
+            img_width = Quartz.CGImageGetWidth(cg_image)
+            img_height = Quartz.CGImageGetHeight(cg_image)
+            
+            # Also get NSImage size to calculate scale factor
+            ns_width = image.size().width
+            ns_height = image.size().height
+            scale_x = img_width / ns_width if ns_width > 0 else 1.0
+            scale_y = img_height / ns_height if ns_height > 0 else 1.0
+            
+            # Create Vision request
+            request = Vision.VNRecognizeTextRequest.alloc().init()
+            request.setRecognitionLevel_(self.recognition_level)
+            request.setUsesLanguageCorrection_(True)
+            
+            # Create request handler
+            handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
+                cg_image, {}
+            )
+            
+            # Perform the request
+            success, error = handler.performRequests_error_([request], None)
+            
+            if not success or error:
+                return []
+            
+            # Get results with positions
+            results = request.results()
+            if not results:
+                return []
+            
+            items = []
+            for observation in results:
+                if not hasattr(observation, 'text'):
+                    continue
+                
+                text = observation.text()
+                confidence = observation.confidence()
+                
+                # Get bounding box (normalized 0-1 coords, origin at bottom-left)
+                bbox = observation.boundingBox()
+                
+                # Convert to pixel coordinates (origin at top-left)
+                # Vision works on the actual CGImage pixels
+                x = bbox.origin.x * img_width
+                y = (1.0 - bbox.origin.y - bbox.size.height) * img_height
+                width = bbox.size.width * img_width
+                height = bbox.size.height * img_height
+                
+                items.append({
+                    'text': text,
+                    'bbox': (int(x), int(y), int(width), int(height)),
+                    'confidence': float(confidence)
+                })
+            
+            return items
+            
+        except Exception as e:
+            return []
+    
     def is_available(self) -> bool:
         """Check if Vision OCR is available.
         

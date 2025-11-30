@@ -4,9 +4,27 @@ This directory contains example scripts demonstrating database extraction.
 
 ## Available Examples
 
-### 1. Simple Usage (`simple_usage.py`)
+### 1. AX-Based Database Extraction (`extract_database_with_ax.py`) ⭐ NEW!
 
-Minimal example showing the easiest way to extract database pages:
+Extract database pages using AX navigation - **no API token needed!**
+
+```bash
+# Open a database in Notion first, then run:
+python examples/extract_database_with_ax.py
+```
+
+Features:
+- No API token required
+- Interactive prompts
+- Navigates through database rows
+- Progress display
+- Saves as JSON
+
+**This is the recommended method if you don't have an API token!**
+
+### 2. Simple Usage (`simple_usage.py`)
+
+Minimal example showing API-based extraction:
 
 ```python
 from src.database_extractor import extract_database_pages
@@ -28,9 +46,9 @@ export NOTION_TOKEN="secret_..."
 python examples/simple_usage.py
 ```
 
-### 2. Recipe Database Extractor (`extract_recipe_database.py`)
+### 3. Recipe Database Extractor (`extract_recipe_database.py`)
 
-Interactive script that prompts for database ID and extracts recipes with full output:
+Interactive script using API that prompts for database ID:
 
 ```bash
 export NOTION_TOKEN="secret_..."

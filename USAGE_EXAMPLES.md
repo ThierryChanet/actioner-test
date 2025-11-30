@@ -42,7 +42,34 @@ python -m src.cli list-pages
 
 ### Extract from Database
 
-Extract content from the first N pages of a Notion database (e.g., Recipe database):
+Two methods: **AX Navigation** (no API) or **API-based** (faster).
+
+#### Method 1: AX Navigation (No Token Needed!)
+
+Extract by clicking through database rows - no API token required:
+
+```bash
+# 1. Open your database in Notion desktop app
+# 2. Make sure you're viewing the database (table/board/gallery view)
+# 3. Run:
+
+python -m src.cli extract-database-ax --limit 10
+
+# With both JSON and CSV output
+python -m src.cli extract-database-ax --limit 10 --output both
+
+# List rows first to preview
+python -m src.cli list-database-rows
+
+# Slower, more reliable navigation
+python -m src.cli extract-database-ax --limit 5 --navigation-delay 2.0
+```
+
+**See [DATABASE_AX_EXTRACTION.md](DATABASE_AX_EXTRACTION.md) for complete guide.**
+
+#### Method 2: API-based (Faster for Bulk)
+
+Extract using Notion API - requires token but much faster:
 
 ```bash
 # Set your Notion API token
@@ -63,6 +90,8 @@ python -m src.cli --verbose extract-database "your-database-id" --limit 10
 2. Click "..." menu → "Copy link"
 3. The URL looks like: `https://www.notion.so/workspace/DATABASE_ID?v=...`
 4. Extract the `DATABASE_ID` part (32-character string)
+
+**See [DATABASE_EXTRACTION.md](DATABASE_EXTRACTION.md) for API method guide.**
 
 ## Advanced Examples
 
@@ -187,9 +216,70 @@ report = differ.generate_report(comparison)
 print(report)
 ```
 
-### Database Extraction (Programmatic)
+### Database Extraction with AX Navigation (No API Token)
 
-Extract content from multiple pages in a database using Python:
+Extract by clicking through database rows using Accessibility:
+
+```python
+from src.ax.client import AXClient
+from src.notion.detector import NotionDetector
+from src.notion.navigator import NotionNavigator
+from src.notion.extractor import NotionExtractor
+from src.notion.database_ax_extractor import DatabaseAXExtractor
+
+# Initialize components
+ax_client = AXClient()
+detector = NotionDetector(ax_client)
+navigator = NotionNavigator(detector)
+extractor = NotionExtractor(detector)
+
+# Activate Notion (must have database open)
+detector.ensure_notion_active()
+
+# Create database extractor
+db_extractor = DatabaseAXExtractor(detector, navigator, extractor)
+
+# Preview available rows
+preview = db_extractor.preview_database(limit=10)
+print(f"Found {len(preview)} rows")
+for item in preview:
+    print(f"  {item['index']+1}. {item['title']}")
+
+# Extract pages by navigating through rows
+results = db_extractor.extract_database_pages(
+    limit=10,
+    use_ocr=True,
+    navigation_delay=1.0
+)
+
+# Process results
+for result in results:
+    print(f"{result.title}: {len(result.blocks)} blocks")
+```
+
+**Extract specific pages by title:**
+
+```python
+# Extract only specific pages
+page_titles = [
+    "Chocolate Chip Cookies",
+    "Banana Bread",
+    "Thai Green Curry"
+]
+
+results = db_extractor.extract_database_pages_by_titles(
+    page_titles=page_titles,
+    use_ocr=True,
+    navigation_delay=1.5
+)
+
+for result in results:
+    print(f"Extracted: {result.title}")
+```
+
+### Database Extraction (Programmatic with API)
+
+Extract content from multiple pages in a database using Python and API:
 
 ```python
 from src.database_extractor import extract_database_pages

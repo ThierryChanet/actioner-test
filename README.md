@@ -5,7 +5,8 @@ A macOS tool that extracts text content from the Notion desktop app using **dire
 ## Features
 
 - **Direct AX-based text extraction** - Uses macOS Accessibility APIs for reliable content capture
-- **Database extraction** - Extract content from multiple pages in a Notion database (e.g., Recipe database)
+- **Database extraction (AX Navigation)** - Click through database rows to extract pages - **no API token needed!**
+- **Database extraction (API)** - Fast bulk extraction using Notion API
 - **Programmatic navigation** - Navigate between Notion pages without mouse simulation
 - **Deterministic scrolling** - Full-page traversal with consistent results across runs
 - **OCR fallback** - macOS Vision API and Tesseract for inaccessible elements
@@ -70,14 +71,25 @@ export NOTION_TOKEN="your_notion_api_token"
 python -m src.cli validate "Project Roadmap" --page-id "your-page-id"
 ```
 
-### Extract from Database
+### Extract from Database (Two Methods)
+
+#### Method 1: AX Navigation (No API token needed!)
+
+```bash
+# Open database in Notion, then:
+python -m src.cli extract-database-ax --limit 10
+```
+
+**📖 See [DATABASE_AX_EXTRACTION.md](DATABASE_AX_EXTRACTION.md)** - Extracts by clicking through rows
+
+#### Method 2: API-based (Faster for bulk extraction)
 
 ```bash
 export NOTION_TOKEN="your_notion_api_token"
 python -m src.cli extract-database "your-database-id" --limit 10
 ```
 
-**📖 For detailed database extraction guide, see [DATABASE_EXTRACTION.md](DATABASE_EXTRACTION.md)**
+**📖 See [DATABASE_EXTRACTION.md](DATABASE_EXTRACTION.md)** - Direct API access
 
 ## Usage
 
@@ -168,6 +180,39 @@ python -m src.cli --verbose extract-database "abc123def456"
 ```
 
 **See [DATABASE_EXTRACTION.md](DATABASE_EXTRACTION.md) for complete guide.**
+
+#### `extract-database-ax`
+
+Extract database pages using AX navigation (no API token required).
+
+**Options:**
+- `--limit N` - Number of pages to extract (default: 10)
+- `--output [json|csv|both]` - Output format (default: json)
+- `--no-ocr` - Disable OCR fallback
+- `--navigation-delay SECONDS` - Delay after navigation (default: 1.0)
+
+**Examples:**
+```bash
+# Open a database in Notion first, then run:
+python -m src.cli extract-database-ax --limit 10
+
+# With verbose output
+python -m src.cli --verbose extract-database-ax --limit 5 --output both
+
+# Faster navigation (less reliable)
+python -m src.cli extract-database-ax --limit 10 --navigation-delay 0.5
+```
+
+**See [DATABASE_AX_EXTRACTION.md](DATABASE_AX_EXTRACTION.md) for complete guide.**
+
+#### `list-database-rows`
+
+List all rows in the current database view.
+
+**Example:**
+```bash
+python -m src.cli list-database-rows
+```
 
 #### `list-pages`
 
