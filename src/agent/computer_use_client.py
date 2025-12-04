@@ -152,7 +152,7 @@ class ComputerUseClient:
         elif action == "left_click":
             if coordinate:
                 self._mouse_move(coordinate[0], coordinate[1])
-                time.sleep(0.1)
+                time.sleep(0.01)  # Minimal delay for UI responsiveness
             self._mouse_click(left=True)
             return {
                 "action": "left_click",
@@ -162,7 +162,7 @@ class ComputerUseClient:
         elif action == "right_click":
             if coordinate:
                 self._mouse_move(coordinate[0], coordinate[1])
-                time.sleep(0.1)
+                time.sleep(0.01)  # Minimal delay for UI responsiveness
             self._mouse_click(left=False)
             return {
                 "action": "right_click",
@@ -172,7 +172,7 @@ class ComputerUseClient:
         elif action == "double_click":
             if coordinate:
                 self._mouse_move(coordinate[0], coordinate[1])
-                time.sleep(0.1)
+                time.sleep(0.01)  # Minimal delay for UI responsiveness
             self._mouse_click(left=True, double=True)
             return {
                 "action": "double_click",
@@ -251,7 +251,7 @@ class ComputerUseClient:
             )
         
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, down_event)
-        time.sleep(0.05)
+        time.sleep(0.02)  # Reduced delay for faster clicks
         
         # Create and post mouse up event
         up_event = Quartz.CGEventCreateMouseEvent(

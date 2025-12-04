@@ -20,6 +20,7 @@ from .tools import get_notion_tools
 from .callbacks import UserInputCallback, ProgressCallback
 from .computer_use_client import ComputerUseClient
 from .computer_use_tools import get_computer_use_tools
+from .responses_client import ResponsesAPIClient
 
 
 SYSTEM_PROMPT = """You are a Notion Extraction Expert assistant. You help users extract and analyze content from their Notion workspace using the macOS Notion app.
@@ -212,9 +213,24 @@ class NotionAgent:
         
         # Initialize Computer Use client if enabled
         self.computer_client = None
+        self.responses_client = None
         if computer_use:
             try:
-                self.computer_client = ComputerUseClient(display_num=display_num)
+                # Try new Responses API client first
+                from .responses_client import ResponsesAPIClient
+                self.responses_client = ResponsesAPIClient(
+                    display_width=1920,  # TODO: Make configurable
+                    display_height=1080,
+                    use_native_computer_use=True,
+                    verbose=verbose
+                )
+                # Keep reference to underlying custom client if used
+                self.computer_client = self.responses_client.custom_client
+                if verbose:
+                    if self.responses_client.native_computer_use_available:
+                        print("✅ Using OpenAI native Computer Use (Responses API)")
+                    else:
+                        print("✅ Using custom macOS Computer Use implementation")
             except Exception as e:
                 if verbose:
                     print(f"Warning: Computer Use initialization failed: {e}")
@@ -225,10 +241,11 @@ class NotionAgent:
         self.llm = self._init_llm(model, temperature)
         
         # Initialize tools (computer use or standard)
-        if self.computer_use and self.computer_client:
+        if self.computer_use and self.responses_client:
             # Computer use tools + extraction tools
             from .tools import ExtractPageContentTool, ExtractDatabaseTool, GetCurrentContextTool, AskUserTool
-            computer_tools = get_computer_use_tools(self.computer_client, self.state)
+            # Pass the responses_client which handles both native and custom implementations
+            computer_tools = get_computer_use_tools(self.responses_client, self.state)
             extraction_tools = [
                 ExtractPageContentTool(orchestrator=self.orchestrator, state=self.state),
                 ExtractDatabaseTool(orchestrator=self.orchestrator, state=self.state),
@@ -260,7 +277,12 @@ class NotionAgent:
         Returns:
             LLM instance
         """
-        model = model or "gpt-4-turbo-preview"
+        # Use vision-capable model if computer use is enabled
+        if self.computer_use:
+            model = model or "gpt-4o"  # gpt-4o has vision capabilities
+        else:
+            model = model or "gpt-4-turbo-preview"
+            
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise ValueError(
@@ -348,9 +370,9 @@ class NotionAgent:
         self.memory.clear()
         self.state = AgentState()
         # Reinitialize tools with new state
-        if self.computer_use and self.computer_client:
+        if self.computer_use and self.responses_client:
             from .tools import ExtractPageContentTool, ExtractDatabaseTool, GetCurrentContextTool, AskUserTool
-            computer_tools = get_computer_use_tools(self.computer_client, self.state)
+            computer_tools = get_computer_use_tools(self.responses_client, self.state)
             extraction_tools = [
                 ExtractPageContentTool(orchestrator=self.orchestrator, state=self.state),
                 ExtractDatabaseTool(orchestrator=self.orchestrator, state=self.state),

@@ -26,7 +26,7 @@ from .core import create_agent
 @click.option('--verbose', '-v', is_flag=True,
               help='Enable verbose logging')
 @click.option('--no-computer-use', is_flag=True,
-              help='Disable Computer Use API (use standard AX navigation)')
+              help='Disable Computer Use API (Computer Use is enabled by default)')
 @click.option('--display', '-d',
               type=int,
               default=1,
@@ -119,7 +119,7 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose,
 @click.option('--output-dir', '-o', default='output')
 @click.option('--verbose', '-v', is_flag=True)
 @click.option('--no-computer-use', is_flag=True,
-              help='Disable Computer Use API (use standard AX navigation)')
+              help='Disable Computer Use API (Computer Use is enabled by default)')
 @click.option('--display', '-d', type=int, default=1,
               help='Display number for Computer Use')
 def interactive(model, notion_token, output_dir, verbose, no_computer_use, display):
@@ -149,7 +149,7 @@ def interactive(model, notion_token, output_dir, verbose, no_computer_use, displ
 @click.option('--output-dir', '-o', default='output')
 @click.option('--verbose', '-v', is_flag=True)
 @click.option('--no-computer-use', is_flag=True,
-              help='Disable Computer Use API (use standard AX navigation)')
+              help='Disable Computer Use API (Computer Use is enabled by default)')
 @click.option('--display', '-d', type=int, default=1,
               help='Display number for Computer Use')
 def ask(query, model, notion_token, output_dir, verbose, no_computer_use, display):

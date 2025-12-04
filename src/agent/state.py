@@ -23,6 +23,12 @@ class AgentState:
     available_pages: List[str] = field(default_factory=list)
     """Cached list of available pages"""
     
+    last_screenshot: Optional[str] = None
+    """Base64-encoded screenshot data from last capture"""
+    
+    last_screenshot_timestamp: Optional[float] = None
+    """Timestamp of last screenshot"""
+    
     def update_current_page(self, page_title: str):
         """Update the current page and add to history."""
         if self.current_page:

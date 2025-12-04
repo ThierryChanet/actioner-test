@@ -1,13 +1,21 @@
 """LangChain tools for OpenAI Computer Control Tools."""
 
 import json
-from typing import Optional, Type, Tuple
+import time
+from typing import Optional, Type, Tuple, Union
 from pydantic import BaseModel, Field
 from langchain.tools import BaseTool
 
-from .computer_use_client import ComputerUseClient
 from .state import AgentState
 from .callbacks import show_progress
+
+# Support both old and new clients for backward compatibility
+try:
+    from .responses_client import ResponsesAPIClient
+    ComputerClient = Union[ResponsesAPIClient, 'ComputerUseClient']
+except ImportError:
+    from .computer_use_client import ComputerUseClient
+    ComputerClient = ComputerUseClient
 
 
 class ScreenshotInput(BaseModel):
@@ -16,39 +24,163 @@ class ScreenshotInput(BaseModel):
 
 
 class ScreenshotTool(BaseTool):
-    """Tool for capturing screenshots of the screen."""
+    """Tool for capturing screenshots of the screen and describing what's visible."""
     
     name: str = "take_screenshot"
     description: str = (
-        "Capture a screenshot of the entire screen. "
-        "Use this to see what's currently visible on the screen. "
-        "Returns base64-encoded image data. "
-        "Essential for understanding screen state before taking actions."
+        "Capture a screenshot of the entire screen and analyze what's visible. "
+        "This tool uses vision AI to describe everything on screen including: "
+        "UI elements, text content, application windows, buttons, menus, and layout. "
+        "Essential for understanding screen state before taking actions. "
+        "Returns a detailed description of what's currently visible on the screen."
     )
     args_schema: Type[BaseModel] = ScreenshotInput
     
-    client: ComputerUseClient = Field(exclude=True)
+    client: object = Field(exclude=True)  # ResponsesAPIClient or ComputerUseClient
     state: AgentState = Field(exclude=True)
     
     def _run(self) -> str:
-        """Take a screenshot."""
+        """Take a screenshot and describe it using vision AI."""
         show_progress("Capturing screenshot...")
         
         try:
-            screenshot_b64 = self.client.take_screenshot()
+            # Use caching for performance with ResponsesAPIClient
+            use_cache = True
+            if hasattr(self.client, 'take_screenshot'):
+                screenshot_b64 = self.client.take_screenshot(use_cache=use_cache)
+            else:
+                # Fallback for old client (no caching)
+                screenshot_b64 = self.client.take_screenshot()
+            
+            # Store the screenshot in state
+            self.state.last_screenshot = screenshot_b64
+            self.state.last_screenshot_timestamp = time.time()
+            
+            # Analyze the screenshot using OpenAI vision (via Responses API if available)
+            show_progress("Analyzing screen with vision AI...")
+            description = self._analyze_screenshot_optimized(screenshot_b64)
+            
+            # Get screen dimensions
+            width = height = 0
+            if hasattr(self.client, 'display_width'):
+                width = self.client.display_width
+                height = self.client.display_height
+            elif hasattr(self.client, 'width'):
+                width = self.client.width
+                height = self.client.height
             
             return json.dumps({
                 "status": "success",
-                "message": "Screenshot captured",
-                "width": self.client.width,
-                "height": self.client.height,
-                "note": "Screenshot data available for analysis"
+                "width": width,
+                "height": height,
+                "screen_description": description,
+                "note": "Screenshot captured and analyzed"
             }, indent=2)
         except Exception as e:
             return json.dumps({
                 "status": "error",
-                "message": f"Failed to capture screenshot: {e}"
+                "message": f"Failed to capture/analyze screenshot: {e}"
             }, indent=2)
+    
+    def _analyze_screenshot_optimized(self, screenshot_b64: str) -> str:
+        """Analyze screenshot using OpenAI vision model (optimized).
+        
+        Uses Responses API if available, falls back to Chat Completions.
+        
+        Args:
+            screenshot_b64: Base64-encoded PNG screenshot
+            
+        Returns:
+            Description of what's visible in the screenshot
+        """
+        try:
+            # Use ResponsesAPIClient if available for better performance
+            if hasattr(self.client, 'create_completion'):
+                response = self.client.create_completion(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": (
+                                        "Describe what you see on this screen concisely. "
+                                        "Include: application name, visible UI elements, text content, "
+                                        "buttons, menus, sidebars. "
+                                        "Be specific about locations and provide approximate coordinates. "
+                                        "Focus on actionable information."
+                                    )
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{screenshot_b64}",
+                                        "detail": "high"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    max_tokens=800,  # Reduced for faster response
+                    temperature=0
+                )
+                return response.choices[0].message.content
+            else:
+                # Fallback to direct OpenAI call
+                return self._analyze_screenshot(screenshot_b64)
+            
+        except Exception as e:
+            return f"Vision analysis failed: {e}"
+    
+    def _analyze_screenshot(self, screenshot_b64: str) -> str:
+        """Fallback: Analyze screenshot using direct OpenAI call.
+        
+        Args:
+            screenshot_b64: Base64-encoded PNG screenshot
+            
+        Returns:
+            Description of what's visible in the screenshot
+        """
+        try:
+            from openai import OpenAI
+            import os
+            
+            client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+            
+            response = client.chat.completions.create(
+                model="gpt-4o",  # Vision-capable model
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "Describe what you see on this screen concisely. "
+                                    "Include: application name, visible UI elements, text content, "
+                                    "buttons, menus, sidebars. "
+                                    "Be specific about locations and provide approximate coordinates. "
+                                    "Focus on actionable information."
+                                )
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{screenshot_b64}",
+                                    "detail": "high"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=800,  # Reduced for faster response
+                temperature=0
+            )
+            
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            return f"Vision analysis failed: {e}"
 
 
 class MouseMoveInput(BaseModel):
@@ -68,7 +200,7 @@ class MouseMoveTool(BaseTool):
     )
     args_schema: Type[BaseModel] = MouseMoveInput
     
-    client: ComputerUseClient = Field(exclude=True)
+    client: object = Field(exclude=True)
     state: AgentState = Field(exclude=True)
     
     def _run(self, x: int, y: int) -> str:
@@ -78,12 +210,18 @@ class MouseMoveTool(BaseTool):
         try:
             result = self.client.execute_action("mouse_move", coordinate=(x, y))
             
-            return json.dumps({
+            response = {
                 "status": "success",
                 "action": "mouse_move",
                 "x": x,
                 "y": y
-            }, indent=2)
+            }
+            
+            # Add latency info if available (from ResponsesAPIClient)
+            if hasattr(result, 'latency_ms') and result.latency_ms:
+                response["latency_ms"] = round(result.latency_ms, 1)
+            
+            return json.dumps(response, indent=2)
         except Exception as e:
             return json.dumps({
                 "status": "error",
@@ -114,26 +252,31 @@ class LeftClickTool(BaseTool):
     )
     args_schema: Type[BaseModel] = LeftClickInput
     
-    client: ComputerUseClient = Field(exclude=True)
+    client: object = Field(exclude=True)
     state: AgentState = Field(exclude=True)
     
     def _run(self, x: Optional[int] = None, y: Optional[int] = None) -> str:
         """Perform left click."""
         if x is not None and y is not None:
-            show_progress(f"Left clicking at ({x}, {y})...")
+            show_progress(f"Clicking at ({x}, {y})...")
             coord = (x, y)
         else:
-            show_progress("Left clicking at current position...")
+            show_progress("Clicking at current position...")
             coord = None
         
         try:
             result = self.client.execute_action("left_click", coordinate=coord)
             
-            return json.dumps({
+            response = {
                 "status": "success",
                 "action": "left_click",
                 "coordinate": coord
-            }, indent=2)
+            }
+            
+            if hasattr(result, 'latency_ms') and result.latency_ms:
+                response["latency_ms"] = round(result.latency_ms, 1)
+            
+            return json.dumps(response, indent=2)
         except Exception as e:
             return json.dumps({
                 "status": "error",
@@ -164,7 +307,7 @@ class RightClickTool(BaseTool):
     )
     args_schema: Type[BaseModel] = RightClickInput
     
-    client: ComputerUseClient = Field(exclude=True)
+    client: object = Field(exclude=True)
     state: AgentState = Field(exclude=True)
     
     def _run(self, x: Optional[int] = None, y: Optional[int] = None) -> str:
@@ -179,11 +322,16 @@ class RightClickTool(BaseTool):
         try:
             result = self.client.execute_action("right_click", coordinate=coord)
             
-            return json.dumps({
+            response = {
                 "status": "success",
                 "action": "right_click",
                 "coordinate": coord
-            }, indent=2)
+            }
+            
+            if hasattr(result, 'latency_ms') and result.latency_ms:
+                response["latency_ms"] = round(result.latency_ms, 1)
+            
+            return json.dumps(response, indent=2)
         except Exception as e:
             return json.dumps({
                 "status": "error",
@@ -214,7 +362,7 @@ class DoubleClickTool(BaseTool):
     )
     args_schema: Type[BaseModel] = DoubleClickInput
     
-    client: ComputerUseClient = Field(exclude=True)
+    client: object = Field(exclude=True)
     state: AgentState = Field(exclude=True)
     
     def _run(self, x: Optional[int] = None, y: Optional[int] = None) -> str:
@@ -229,11 +377,16 @@ class DoubleClickTool(BaseTool):
         try:
             result = self.client.execute_action("double_click", coordinate=coord)
             
-            return json.dumps({
+            response = {
                 "status": "success",
                 "action": "double_click",
                 "coordinate": coord
-            }, indent=2)
+            }
+            
+            if hasattr(result, 'latency_ms') and result.latency_ms:
+                response["latency_ms"] = round(result.latency_ms, 1)
+            
+            return json.dumps(response, indent=2)
         except Exception as e:
             return json.dumps({
                 "status": "error",
@@ -257,7 +410,7 @@ class TypeTextTool(BaseTool):
     )
     args_schema: Type[BaseModel] = TypeTextInput
     
-    client: ComputerUseClient = Field(exclude=True)
+    client: object = Field(exclude=True)
     state: AgentState = Field(exclude=True)
     
     def _run(self, text: str) -> str:
@@ -267,11 +420,16 @@ class TypeTextTool(BaseTool):
         try:
             result = self.client.execute_action("type", text=text)
             
-            return json.dumps({
+            response = {
                 "status": "success",
                 "action": "type",
                 "text": text
-            }, indent=2)
+            }
+            
+            if hasattr(result, 'latency_ms') and result.latency_ms:
+                response["latency_ms"] = round(result.latency_ms, 1)
+            
+            return json.dumps(response, indent=2)
         except Exception as e:
             return json.dumps({
                 "status": "error",
@@ -301,7 +459,7 @@ class PressKeyTool(BaseTool):
     )
     args_schema: Type[BaseModel] = PressKeyInput
     
-    client: ComputerUseClient = Field(exclude=True)
+    client: object = Field(exclude=True)
     state: AgentState = Field(exclude=True)
     
     def _run(self, key: str) -> str:
@@ -311,11 +469,16 @@ class PressKeyTool(BaseTool):
         try:
             result = self.client.execute_action("key", text=key)
             
-            return json.dumps({
+            response = {
                 "status": "success",
                 "action": "key",
                 "key": key
-            }, indent=2)
+            }
+            
+            if hasattr(result, 'latency_ms') and result.latency_ms:
+                response["latency_ms"] = round(result.latency_ms, 1)
+            
+            return json.dumps(response, indent=2)
         except Exception as e:
             return json.dumps({
                 "status": "error",
@@ -339,7 +502,7 @@ class GetCursorPositionTool(BaseTool):
     )
     args_schema: Type[BaseModel] = GetCursorPositionInput
     
-    client: ComputerUseClient = Field(exclude=True)
+    client: object = Field(exclude=True)
     state: AgentState = Field(exclude=True)
     
     def _run(self) -> str:
@@ -347,10 +510,16 @@ class GetCursorPositionTool(BaseTool):
         try:
             result = self.client.execute_action("cursor_position")
             
+            # Handle both ToolResult and dict responses
+            if hasattr(result, 'data'):
+                data = result.data
+            else:
+                data = result
+            
             return json.dumps({
                 "status": "success",
-                "x": result["x"],
-                "y": result["y"]
+                "x": data.get("x", 0),
+                "y": data.get("y", 0)
             }, indent=2)
         except Exception as e:
             return json.dumps({
@@ -375,7 +544,7 @@ class GetScreenInfoTool(BaseTool):
     )
     args_schema: Type[BaseModel] = GetScreenInfoInput
     
-    client: ComputerUseClient = Field(exclude=True)
+    client: object = Field(exclude=True)
     state: AgentState = Field(exclude=True)
     
     def _run(self) -> str:
@@ -383,12 +552,19 @@ class GetScreenInfoTool(BaseTool):
         try:
             info = self.client.get_screen_info()
             
-            return json.dumps({
+            response = {
                 "status": "success",
-                "width": info["width"],
-                "height": info["height"],
-                "display_num": info["display_num"]
-            }, indent=2)
+                "width": info.get("width", 0),
+                "height": info.get("height", 0)
+            }
+            
+            # Add optional fields if available
+            if "display_num" in info:
+                response["display_num"] = info["display_num"]
+            if "native_computer_use" in info:
+                response["using_native_api"] = info["native_computer_use"]
+            
+            return json.dumps(response, indent=2)
         except Exception as e:
             return json.dumps({
                 "status": "error",
@@ -396,11 +572,11 @@ class GetScreenInfoTool(BaseTool):
             }, indent=2)
 
 
-def get_computer_use_tools(client: ComputerUseClient, state: AgentState) -> list:
+def get_computer_use_tools(client, state: AgentState) -> list:
     """Get all computer use tools for the agent.
     
     Args:
-        client: ComputerUseClient instance
+        client: ResponsesAPIClient or ComputerUseClient instance
         state: AgentState instance
         
     Returns:
