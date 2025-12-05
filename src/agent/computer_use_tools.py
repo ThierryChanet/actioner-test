@@ -1,21 +1,16 @@
-"""LangChain tools for OpenAI Computer Control Tools."""
+"""LangChain tools for Anthropic Computer Use."""
 
 import json
 import time
-from typing import Optional, Type, Tuple, Union
+from typing import Optional, Type
 from pydantic import BaseModel, Field
 from langchain.tools import BaseTool
 
 from .state import AgentState
 from .callbacks import show_progress
 
-# Support both old and new clients for backward compatibility
-try:
-    from .responses_client import ResponsesAPIClient
-    ComputerClient = Union[ResponsesAPIClient, 'ComputerUseClient']
-except ImportError:
-    from .computer_use_client import ComputerUseClient
-    ComputerClient = ComputerUseClient
+# Import Anthropic Computer Use client
+from .anthropic_computer_client import AnthropicComputerClient
 
 
 class ScreenshotInput(BaseModel):
@@ -29,158 +24,54 @@ class ScreenshotTool(BaseTool):
     name: str = "take_screenshot"
     description: str = (
         "Capture a screenshot of the entire screen and analyze what's visible. "
-        "This tool uses vision AI to describe everything on screen including: "
+        "This tool uses Claude's vision to describe everything on screen including: "
         "UI elements, text content, application windows, buttons, menus, and layout. "
         "Essential for understanding screen state before taking actions. "
         "Returns a detailed description of what's currently visible on the screen."
     )
     args_schema: Type[BaseModel] = ScreenshotInput
     
-    client: object = Field(exclude=True)  # ResponsesAPIClient or ComputerUseClient
+    client: AnthropicComputerClient = Field(exclude=True)
     state: AgentState = Field(exclude=True)
     
     def _run(self) -> str:
-        """Take a screenshot and describe it using vision AI."""
+        """Take a screenshot and describe it using Claude's vision."""
         show_progress("Capturing screenshot...")
         
         try:
-            # Use caching for performance with ResponsesAPIClient
-            use_cache = True
-            if hasattr(self.client, 'take_screenshot'):
-                screenshot_b64 = self.client.take_screenshot(use_cache=use_cache)
-            else:
-                # Fallback for old client (no caching)
-                screenshot_b64 = self.client.take_screenshot()
+            # Use caching for performance
+            screenshot_b64 = self.client.take_screenshot(use_cache=True)
             
             # Store the screenshot in state
             self.state.last_screenshot = screenshot_b64
             self.state.last_screenshot_timestamp = time.time()
             
-            # Analyze the screenshot using OpenAI vision (via Responses API if available)
-            show_progress("Analyzing screen with vision AI...")
-            description = self._analyze_screenshot_optimized(screenshot_b64)
+            # Analyze the screenshot using Claude's vision
+            show_progress("Analyzing screen with Claude vision...")
+            
+            # Use Anthropic client's built-in analysis method
+            result = self.client.execute_action("screenshot")
+            if hasattr(result, 'data') and result.data.get('description'):
+                description = result.data['description']
+            else:
+                description = "Screenshot captured successfully"
             
             # Get screen dimensions
-            width = height = 0
-            if hasattr(self.client, 'display_width'):
-                width = self.client.display_width
-                height = self.client.display_height
-            elif hasattr(self.client, 'width'):
-                width = self.client.width
-                height = self.client.height
+            width = self.client.display_width
+            height = self.client.display_height
             
             return json.dumps({
                 "status": "success",
                 "width": width,
                 "height": height,
                 "screen_description": description,
-                "note": "Screenshot captured and analyzed"
+                "note": "Screenshot captured and analyzed with Claude vision"
             }, indent=2)
         except Exception as e:
             return json.dumps({
                 "status": "error",
                 "message": f"Failed to capture/analyze screenshot: {e}"
             }, indent=2)
-    
-    def _analyze_screenshot_optimized(self, screenshot_b64: str) -> str:
-        """Analyze screenshot using OpenAI vision model (optimized).
-        
-        Uses Responses API if available, falls back to Chat Completions.
-        
-        Args:
-            screenshot_b64: Base64-encoded PNG screenshot
-            
-        Returns:
-            Description of what's visible in the screenshot
-        """
-        try:
-            # Use ResponsesAPIClient if available for better performance
-            if hasattr(self.client, 'create_completion'):
-                response = self.client.create_completion(
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": (
-                                        "Describe what you see on this screen concisely. "
-                                        "Include: application name, visible UI elements, text content, "
-                                        "buttons, menus, sidebars. "
-                                        "Be specific about locations and provide approximate coordinates. "
-                                        "Focus on actionable information."
-                                    )
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/png;base64,{screenshot_b64}",
-                                        "detail": "high"
-                                    }
-                                }
-                            ]
-                        }
-                    ],
-                    max_tokens=800,  # Reduced for faster response
-                    temperature=0
-                )
-                return response.choices[0].message.content
-            else:
-                # Fallback to direct OpenAI call
-                return self._analyze_screenshot(screenshot_b64)
-            
-        except Exception as e:
-            return f"Vision analysis failed: {e}"
-    
-    def _analyze_screenshot(self, screenshot_b64: str) -> str:
-        """Fallback: Analyze screenshot using direct OpenAI call.
-        
-        Args:
-            screenshot_b64: Base64-encoded PNG screenshot
-            
-        Returns:
-            Description of what's visible in the screenshot
-        """
-        try:
-            from openai import OpenAI
-            import os
-            
-            client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-            
-            response = client.chat.completions.create(
-                model="gpt-4o",  # Vision-capable model
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": (
-                                    "Describe what you see on this screen concisely. "
-                                    "Include: application name, visible UI elements, text content, "
-                                    "buttons, menus, sidebars. "
-                                    "Be specific about locations and provide approximate coordinates. "
-                                    "Focus on actionable information."
-                                )
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{screenshot_b64}",
-                                    "detail": "high"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                max_tokens=800,  # Reduced for faster response
-                temperature=0
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            return f"Vision analysis failed: {e}"
 
 
 class MouseMoveInput(BaseModel):
@@ -217,7 +108,7 @@ class MouseMoveTool(BaseTool):
                 "y": y
             }
             
-            # Add latency info if available (from ResponsesAPIClient)
+            # Add latency info if available
             if hasattr(result, 'latency_ms') and result.latency_ms:
                 response["latency_ms"] = round(result.latency_ms, 1)
             
@@ -573,14 +464,13 @@ class SwitchDesktopTool(BaseTool):
                 # Fallback: try execute_action
                 result = self.client.execute_action("switch_desktop", text=application_name)
 
-            # Handle both ActionResult objects and dictionaries
+            # Handle ActionResult objects from Anthropic client
             if hasattr(result, 'success'):
-                # ActionResult object (Anthropic client)
                 success = result.success
                 error_msg = result.error if hasattr(result, 'error') else None
                 data = result.data if hasattr(result, 'data') else {}
             else:
-                # Dictionary (OpenAI client)
+                # Dictionary response
                 success = result.get("success", False)
                 error_msg = result.get("error")
                 data = result
@@ -650,11 +540,11 @@ class GetScreenInfoTool(BaseTool):
             }, indent=2)
 
 
-def get_computer_use_tools(client, state: AgentState) -> list:
+def get_computer_use_tools(client: AnthropicComputerClient, state: AgentState) -> list:
     """Get all computer use tools for the agent.
     
     Args:
-        client: ResponsesAPIClient or ComputerUseClient instance
+        client: AnthropicComputerClient instance
         state: AgentState instance
         
     Returns:

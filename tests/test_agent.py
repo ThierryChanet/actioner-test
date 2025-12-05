@@ -23,13 +23,16 @@ def check_environment():
     issues = []
     
     # Check API keys
-    if not os.environ.get('OPENAI_API_KEY') and not os.environ.get('ANTHROPIC_API_KEY'):
-        issues.append("❌ No LLM API key found (OPENAI_API_KEY or ANTHROPIC_API_KEY)")
+    # OpenAI is required for LLM, Anthropic for Computer Use
+    if not os.environ.get('OPENAI_API_KEY'):
+        issues.append("❌ OPENAI_API_KEY not found (required for LLM)")
     else:
-        if os.environ.get('OPENAI_API_KEY'):
-            print("✅ OpenAI API key found")
-        if os.environ.get('ANTHROPIC_API_KEY'):
-            print("✅ Anthropic API key found")
+        print("✅ OpenAI API key found (for LLM)")
+    
+    if os.environ.get('ANTHROPIC_API_KEY'):
+        print("✅ Anthropic API key found (for Computer Use)")
+    else:
+        print("ℹ️  No Anthropic API key (Computer Use will be disabled)")
     
     # Check optional token
     if os.environ.get('NOTION_TOKEN'):
@@ -78,20 +81,20 @@ def test_agent_creation():
     try:
         from src.agent import create_agent
         
-        # Determine provider based on available keys
-        if os.environ.get('OPENAI_API_KEY'):
-            provider = "openai"
-        elif os.environ.get('ANTHROPIC_API_KEY'):
-            provider = "anthropic"
-        else:
-            print("❌ No API key available")
+        # OpenAI is required for LLM
+        if not os.environ.get('OPENAI_API_KEY'):
+            print("❌ OPENAI_API_KEY required for agent creation")
             return False
         
-        print(f"Creating agent with {provider}...")
+        # Computer Use requires Anthropic key
+        has_anthropic = bool(os.environ.get('ANTHROPIC_API_KEY'))
+        computer_use = has_anthropic
+        
+        print(f"Creating agent (Computer Use: {'enabled' if computer_use else 'disabled'})...")
         agent = create_agent(
-            llm_provider=provider,
             output_dir="output",
-            verbose=False
+            verbose=False,
+            computer_use=computer_use
         )
         
         print("✅ Agent created successfully!")
@@ -114,8 +117,8 @@ def test_tools():
     try:
         from src.agent import create_agent
         
-        provider = "openai" if os.environ.get('OPENAI_API_KEY') else "anthropic"
-        agent = create_agent(llm_provider=provider, verbose=False)
+        has_anthropic = bool(os.environ.get('ANTHROPIC_API_KEY'))
+        agent = create_agent(verbose=False, computer_use=has_anthropic)
         
         tools = agent.tools
         print(f"Agent has {len(tools)} tools:\n")
@@ -183,10 +186,10 @@ def test_simple_query():
     try:
         from src.agent import create_agent
         
-        provider = "openai" if os.environ.get('OPENAI_API_KEY') else "anthropic"
+        has_anthropic = bool(os.environ.get('ANTHROPIC_API_KEY'))
         
         print("Creating agent...")
-        agent = create_agent(llm_provider=provider, verbose=False)
+        agent = create_agent(verbose=False, computer_use=has_anthropic)
         
         print("\nAsking: 'What is your current context?'\n")
         response = agent.run("What is your current context?")

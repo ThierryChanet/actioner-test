@@ -9,12 +9,12 @@ Your LangChain-based Notion Agent is ready! Here's everything you need to start 
 pip install -r requirements.txt
 ```
 
-### 2. Set Your API Key
+### 2. Set Your API Keys
 ```bash
-# For OpenAI (GPT-4)
+# Required for LLM (agent reasoning)
 export OPENAI_API_KEY="sk-..."
 
-# OR for Anthropic (Claude)
+# Required for Computer Use (vision + screen control)
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
@@ -37,11 +37,11 @@ python -m src.agent "list all my pages"
 Try these to get started:
 
 ```bash
-# See what pages you have
-python -m src.agent "what pages do I have?"
+# See what pages you have (via screenshot)
+python -m src.agent "take a screenshot and tell me what pages are visible"
 
-# Extract a page
-python -m src.agent "extract the Roadmap page"
+# Navigate and extract
+python -m src.agent "click on recipes in the sidebar, then extract the content"
 
 # Extract from database
 python -m src.agent "extract 10 recipes"
@@ -52,21 +52,21 @@ python -m src.agent "what's my current context?"
 
 ## What the Agent Can Do
 
+### 🖥️ Computer Use (Default)
+- Take screenshots and analyze with Claude vision
+- Click on UI elements by name or coordinates
+- Type text and press keys
+- Navigate any application
+
 ### 📄 Page Operations
 - Extract page content
 - Navigate between pages
 - Search for pages
-- List all available pages
 
 ### 🗄️ Database Operations
 - Extract multiple pages from databases
 - Count items in databases
 - Query specific database records
-
-### 🔍 Analysis
-- Count blocks/pages
-- Summarize content
-- Compare pages
 
 ### 💬 Conversation
 - Remembers context
@@ -82,11 +82,14 @@ python -m src.agent --interactive
 
 Then chat with the agent:
 ```
-You: list my pages
-Agent: I found 15 pages...
+You: take a screenshot
+Agent: I can see Notion with pages: Recipes, Roadmap...
 
-You: extract the first 3
-Agent: Extracting... Done!
+You: click on recipes
+Agent: Clicked on Recipes. Taking screenshot to verify...
+
+You: extract the database
+Agent: Extracting... Done! 15 recipes with 340 blocks.
 
 You: exit
 ```
@@ -101,13 +104,13 @@ python -m src.agent "your query here"
 - **[AGENT_QUICKSTART.md](AGENT_QUICKSTART.md)** - 5-minute quick start
 - **[AGENT_README.md](AGENT_README.md)** - Complete documentation
 - **[AGENT_QUERIES.md](AGENT_QUERIES.md)** - 100+ example queries
-- **[examples/agent_usage.py](examples/agent_usage.py)** - Code examples
+- **[COMPUTER_USE.md](COMPUTER_USE.md)** - Computer Use guide
 
 ## Testing
 
 Verify everything works:
 ```bash
-python test_agent.py
+python tests/test_agent.py
 ```
 
 ## Need Help?
@@ -124,41 +127,39 @@ python -m src.agent examples
 
 ### Troubleshooting
 - Make sure Notion desktop app is running
-- Verify API key is set correctly
+- Verify both API keys are set correctly
 - Try verbose mode: `python -m src.agent --verbose "query"`
 
 ## What's New
 
-This implementation adds:
+This implementation includes:
 
 ✅ **Natural Language Interface** - Ask in plain English  
-✅ **Intelligent Method Selection** - Auto-chooses best extraction method  
+✅ **Computer Use via Anthropic** - Vision + screen control  
+✅ **Intelligent Method Selection** - Auto-chooses best approach  
 ✅ **Conversation Memory** - Remembers context  
 ✅ **Interactive Mode** - Chat-style interface  
 ✅ **Automatic Fallbacks** - Tries multiple methods if needed  
-✅ **User Clarification** - Asks when stuck  
 
 ## Example Session
 
 ```bash
 $ python -m src.agent --interactive
 
-You: what can you do?
-Agent: I can help you extract and analyze content from Notion...
-
-You: list all my pages
-Agent: I found 15 pages in your sidebar:
-       1. Project Roadmap
-       2. Meeting Notes
-       3. Recipe Database
+You: take a screenshot
+Agent: I can see the Notion app with a sidebar showing:
+       - Project Roadmap
+       - Meeting Notes  
+       - Recipe Database
        ...
+
+You: click on Recipe Database
+Agent: Clicking on Recipe Database... Done!
+       Taking screenshot to verify - page is loading.
 
 You: extract 5 recipes
 Agent: Extracting 5 pages from database... Done!
        Extracted 5 recipes with 127 total blocks.
-
-You: how many blocks total?
-Agent: The 5 recipes contain 127 blocks total.
 
 You: exit
 👋 Goodbye!
@@ -171,13 +172,12 @@ python -m src.agent --interactive
 ```
 
 Then try:
-- `"what pages do I have?"`
-- `"extract the roadmap"`
-- `"extract 10 recipes"`
+- `"take a screenshot"`
+- `"click on [page name]"`
+- `"extract the content"`
 
 ---
 
 **Happy extracting! 🎉**
 
 For more details, see [AGENT_README.md](AGENT_README.md)
-

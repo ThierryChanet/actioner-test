@@ -18,7 +18,8 @@ click>=8.1.0
 langchain>=0.1.0
 langchain-openai>=0.0.5
 langchain-community>=0.0.20
-openai>=1.30.0  # Includes Responses API and Computer Use support
+openai>=1.30.0  # For LLM chat
+anthropic>=0.18.0  # For Computer Use (vision/screen control)
 
 # Testing
 pytest>=7.4.0

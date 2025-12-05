@@ -33,12 +33,9 @@ Setup guides and troubleshooting:
 - **[VERBOSITY_LEVELS.md](guides/VERBOSITY_LEVELS.md)** - Verbosity level configuration
 
 ### Implementation Notes (`implementation/`)
-Technical implementation summaries and migration guides:
+Technical implementation summaries:
 
-- **[COMPUTER_USE_IMPLEMENTATION.md](implementation/COMPUTER_USE_IMPLEMENTATION.md)** - Computer Use integration details
-- **[OPENAI_RESPONSES_API_MIGRATION.md](implementation/OPENAI_RESPONSES_API_MIGRATION.md)** - Responses API migration summary
-- **[RESPONSES_API_IMPLEMENTATION_SUMMARY.md](implementation/RESPONSES_API_IMPLEMENTATION_SUMMARY.md)** - Responses API implementation details
-- **[OPENAI_MIGRATION_SUMMARY.md](implementation/OPENAI_MIGRATION_SUMMARY.md)** - OpenAI migration overview
+- **[COMPUTER_USE_IMPLEMENTATION.md](implementation/COMPUTER_USE_IMPLEMENTATION.md)** - Computer Use integration details (Anthropic)
 - **[VISION_INTEGRATION_SUMMARY.md](implementation/VISION_INTEGRATION_SUMMARY.md)** - Vision integration summary
 - **[AX_VISION_IMPLEMENTATION_SUMMARY.md](implementation/AX_VISION_IMPLEMENTATION_SUMMARY.md)** - AX + Vision implementation
 - **[AX_NAVIGATION_FIX_SUMMARY.md](implementation/AX_NAVIGATION_FIX_SUMMARY.md)** - AX navigation fixes

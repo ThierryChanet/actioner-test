@@ -17,7 +17,7 @@ from .core import create_agent
 @click.option('--interactive', '-i', is_flag=True, 
               help='Start interactive mode')
 @click.option('--model', '-m',
-              help='Specific OpenAI model to use (default: gpt-4-turbo-preview)')
+              help='Specific LLM model to use (default: gpt-4o for OpenAI)')
 @click.option('--notion-token', envvar='NOTION_TOKEN',
               help='Notion API token (or set NOTION_TOKEN env var)')
 @click.option('--output-dir', '-o',
@@ -35,16 +35,13 @@ from .core import create_agent
               type=int,
               default=1,
               help='Display number for Computer Use (default: 1)')
-@click.option('--provider', '-p',
-              type=click.Choice(['openai', 'anthropic', 'auto'], case_sensitive=False),
-              default='auto',
-              help='LLM provider (openai, anthropic, or auto-detect)')
 @click.pass_context
 def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, verbosity,
-        no_computer_use, display, provider):
+        no_computer_use, display):
     """Notion Agent - Intelligent extraction assistant.
 
-    Computer Use is ENABLED by default for screen control via clicks/keyboard.
+    Computer Use (via Anthropic Claude) is ENABLED by default for screen control.
+    Requires: ANTHROPIC_API_KEY for Computer Use, OPENAI_API_KEY for LLM chat.
 
     Examples:
 
@@ -53,12 +50,6 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, verbo
 
         # Interactive mode
         python -m src.agent --interactive
-
-        # Use Anthropic Claude (auto-detected with ANTHROPIC_API_KEY)
-        python -m src.agent --provider=anthropic "extract recipes"
-
-        # Use OpenAI (auto-detected with OPENAI_API_KEY)
-        python -m src.agent --provider=openai "extract recipes"
 
         # Minimal output (timestamps only)
         python -m src.agent --verbosity=minimal "extract recipes"
@@ -75,26 +66,19 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, verbo
         # Help
         python -m src.agent --help
     """
-    # Check for API keys based on provider
-    if provider == 'auto':
-        # Auto-detect: check for either key
-        if not os.environ.get('ANTHROPIC_API_KEY') and not os.environ.get('OPENAI_API_KEY'):
-            click.echo("❌ Error: No API key found")
-            click.echo("   Set ANTHROPIC_API_KEY or OPENAI_API_KEY")
-            sys.exit(1)
-    elif provider == 'anthropic':
-        if not os.environ.get('ANTHROPIC_API_KEY'):
-            click.echo("❌ Error: ANTHROPIC_API_KEY environment variable required")
-            click.echo("   Set it with: export ANTHROPIC_API_KEY='your-key'")
-            sys.exit(1)
-    elif provider == 'openai':
-        if not os.environ.get('OPENAI_API_KEY'):
-            click.echo("❌ Error: OPENAI_API_KEY environment variable required")
-            click.echo("   Set it with: export OPENAI_API_KEY='your-key'")
-            sys.exit(1)
+    # Check for required API keys
+    # OpenAI is required for LLM chat
+    if not os.environ.get('OPENAI_API_KEY'):
+        click.echo("❌ Error: OPENAI_API_KEY environment variable required for LLM")
+        click.echo("   Set it with: export OPENAI_API_KEY='your-key'")
+        sys.exit(1)
     
-    # Computer Use is enabled by default
+    # Computer Use requires Anthropic API key
     computer_use = not no_computer_use
+    if computer_use and not os.environ.get('ANTHROPIC_API_KEY'):
+        click.echo("⚠️  Warning: ANTHROPIC_API_KEY not found - Computer Use disabled")
+        click.echo("   Set it with: export ANTHROPIC_API_KEY='your-key'")
+        computer_use = False
     
     # Handle --verbose flag (overrides verbosity)
     if verbose:
@@ -116,7 +100,6 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, verbo
             verbosity=verbosity,
             computer_use=computer_use,
             display_num=display,
-            llm_provider=provider,
         )
     except Exception as e:
         click.echo(f"❌ Failed to initialize agent: {e}")
@@ -151,7 +134,7 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, verbo
 
 @cli.command()
 @click.option('--model', '-m',
-              help='Specific OpenAI model to use')
+              help='Specific LLM model to use')
 @click.option('--notion-token', envvar='NOTION_TOKEN')
 @click.option('--output-dir', '-o', default='output')
 @click.option('--verbose', '-v', is_flag=True,
@@ -161,22 +144,28 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, verbo
               default='default',
               help='Verbosity level')
 @click.option('--no-computer-use', is_flag=True,
-              help='Disable Computer Use API (Computer Use is enabled by default)')
+              help='Disable Computer Use (requires ANTHROPIC_API_KEY)')
 @click.option('--display', '-d', type=int, default=1,
               help='Display number for Computer Use')
 def interactive(model, notion_token, output_dir, verbose, no_computer_use, display):
-    """Start interactive chat mode (Computer Use enabled by default)."""
-    # Check for OpenAI API key
+    """Start interactive chat mode (Computer Use via Anthropic enabled by default)."""
+    # Check for OpenAI API key (required for LLM)
     if not os.environ.get('OPENAI_API_KEY'):
-        click.echo("❌ Error: OPENAI_API_KEY required")
+        click.echo("❌ Error: OPENAI_API_KEY required for LLM")
         sys.exit(1)
+    
+    # Check for Anthropic key if Computer Use is enabled
+    computer_use = not no_computer_use
+    if computer_use and not os.environ.get('ANTHROPIC_API_KEY'):
+        click.echo("⚠️  ANTHROPIC_API_KEY not found - Computer Use disabled")
+        computer_use = False
     
     agent = create_agent(
         model=model,
         notion_token=notion_token,
         output_dir=output_dir,
         verbose=verbose,
-        computer_use=not no_computer_use,
+        computer_use=computer_use,
         display_num=display,
     )
     
@@ -186,27 +175,33 @@ def interactive(model, notion_token, output_dir, verbose, no_computer_use, displ
 @cli.command()
 @click.argument('query')
 @click.option('--model', '-m',
-              help='Specific OpenAI model to use')
+              help='Specific LLM model to use')
 @click.option('--notion-token', envvar='NOTION_TOKEN')
 @click.option('--output-dir', '-o', default='output')
 @click.option('--verbose', '-v', is_flag=True)
 @click.option('--no-computer-use', is_flag=True,
-              help='Disable Computer Use API (Computer Use is enabled by default)')
+              help='Disable Computer Use (requires ANTHROPIC_API_KEY)')
 @click.option('--display', '-d', type=int, default=1,
               help='Display number for Computer Use')
 def ask(query, model, notion_token, output_dir, verbose, no_computer_use, display):
-    """Ask the agent a single question (Computer Use enabled by default)."""
-    # Check for OpenAI API key
+    """Ask the agent a single question (Computer Use via Anthropic enabled by default)."""
+    # Check for OpenAI API key (required for LLM)
     if not os.environ.get('OPENAI_API_KEY'):
-        click.echo("❌ Error: OPENAI_API_KEY required")
+        click.echo("❌ Error: OPENAI_API_KEY required for LLM")
         sys.exit(1)
+    
+    # Check for Anthropic key if Computer Use is enabled
+    computer_use = not no_computer_use
+    if computer_use and not os.environ.get('ANTHROPIC_API_KEY'):
+        click.echo("⚠️  ANTHROPIC_API_KEY not found - Computer Use disabled")
+        computer_use = False
     
     agent = create_agent(
         model=model,
         notion_token=notion_token,
         output_dir=output_dir,
         verbose=verbose,
-        computer_use=not no_computer_use,
+        computer_use=computer_use,
         display_num=display,
     )
     
@@ -224,7 +219,8 @@ def examples():
 NOTION AGENT - USAGE EXAMPLES
 ======================================================================
 
-Note: Computer Use (screen control) is ENABLED BY DEFAULT!
+Note: Computer Use (via Anthropic Claude) is ENABLED BY DEFAULT!
+Requires: OPENAI_API_KEY for LLM, ANTHROPIC_API_KEY for Computer Use
 
 Basic Extraction (Computer Use enabled):
   python -m src.agent "extract all recipes"
@@ -235,7 +231,7 @@ Database Operations:
   python -m src.agent "extract 20 pages from my recipe database"
   python -m src.agent "how many recipes do I have?"
   
-Screen Control (Computer Use - DEFAULT):
+Screen Control (Computer Use via Anthropic - DEFAULT):
   python -m src.agent "click on the recipes database"
   python -m src.agent "navigate to roadmap page and extract it"
   python -m src.agent "take a screenshot and describe what you see"
@@ -255,7 +251,8 @@ Verbose Mode (see tool calls):
   python -m src.agent --verbose "extract database"
 
 Environment Variables:
-  export OPENAI_API_KEY="sk-..."         # Required
+  export OPENAI_API_KEY="sk-..."         # Required for LLM chat
+  export ANTHROPIC_API_KEY="sk-ant-..." # Required for Computer Use
   export NOTION_TOKEN="secret_..."       # Optional, for API extraction
 
 ======================================================================
@@ -274,9 +271,11 @@ def check():
     
     # Check for API keys
     openai_key = os.environ.get('OPENAI_API_KEY')
+    anthropic_key = os.environ.get('ANTHROPIC_API_KEY')
     notion_token = os.environ.get('NOTION_TOKEN')
     
-    checks.append(("OpenAI API Key (Required)", bool(openai_key)))
+    checks.append(("OpenAI API Key (Required for LLM)", bool(openai_key)))
+    checks.append(("Anthropic API Key (Required for Computer Use)", bool(anthropic_key)))
     checks.append(("Notion API Token (Optional)", bool(notion_token)))
     
     # Check Python packages
@@ -298,6 +297,12 @@ def check():
     except ImportError:
         checks.append(("OpenAI SDK installed", False))
     
+    try:
+        import anthropic
+        checks.append(("Anthropic SDK installed", True))
+    except ImportError:
+        checks.append(("Anthropic SDK installed", False))
+    
     # Display results
     for check_name, passed in checks:
         status = "✅" if passed else "❌"
@@ -305,22 +310,30 @@ def check():
     
     click.echo("\n" + "="*70)
     
-    # Summary - only count required checks
-    required_checks = [checks[0]] + checks[2:]  # OpenAI key + packages
+    # Summary - count required checks (OpenAI key + core packages)
+    required_checks = [checks[0]] + checks[3:6]  # OpenAI key + langchain packages
     total = len(required_checks)
-    passed = sum(1 for _, p in required_checks if p)
+    passed_count = sum(1 for _, p in required_checks if p)
     
-    if passed == total:
-        click.echo("\n✅ All required checks passed! You're ready to use the agent.\n")
+    if passed_count == total:
+        click.echo("\n✅ All required checks passed! You're ready to use the agent.")
+        if not anthropic_key:
+            click.echo("   Note: Set ANTHROPIC_API_KEY to enable Computer Use.\n")
+        else:
+            click.echo("")
     else:
-        click.echo(f"\n⚠️  {total - passed} required checks failed. Please fix the issues above.\n")
+        click.echo(f"\n⚠️  {total - passed_count} required checks failed. Please fix the issues above.\n")
         
         # Provide help
         if not openai_key:
             click.echo("To use the agent, set your OpenAI API key:")
             click.echo("  export OPENAI_API_KEY='your-key'")
         
-        if not all(p for _, p in checks[2:]):
+        if not anthropic_key:
+            click.echo("\nTo enable Computer Use, set your Anthropic API key:")
+            click.echo("  export ANTHROPIC_API_KEY='your-key'")
+        
+        if not all(p for _, p in checks[3:]):
             click.echo("\nTo install missing packages:")
             click.echo("  pip install -r requirements.txt")
         
