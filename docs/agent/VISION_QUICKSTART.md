@@ -161,7 +161,7 @@ Try it out and see how the agent can now truly "see" your screen!
 
 ## Need Help?
 
-- See [COMPUTER_USE_IMPLEMENTATION.md](../../COMPUTER_USE_IMPLEMENTATION.md) for technical details
-- See [VISION_INTEGRATION_SUMMARY.md](../../VISION_INTEGRATION_SUMMARY.md) for implementation info
+- See [COMPUTER_USE_IMPLEMENTATION.md](../implementation/COMPUTER_USE_IMPLEMENTATION.md) for technical details
+- See [VISION_INTEGRATION_SUMMARY.md](../implementation/VISION_INTEGRATION_SUMMARY.md) for implementation info
 - Run `python -m src.agent --help` for command options
 

@@ -29,9 +29,22 @@ Setup guides and troubleshooting:
 - **[QUICK_START_DATABASE.md](guides/QUICK_START_DATABASE.md)** - Quick start for database extraction (API)
 - **[QUICK_START_AX_DATABASE.md](guides/QUICK_START_AX_DATABASE.md)** - Quick start for database extraction (AX)
 - **[DEBUGGING.md](guides/DEBUGGING.md)** - Debugging and troubleshooting
+- **[TROUBLESHOOT_AX_DATABASE.md](guides/TROUBLESHOOT_AX_DATABASE.md)** - AX database extraction troubleshooting
+- **[VERBOSITY_LEVELS.md](guides/VERBOSITY_LEVELS.md)** - Verbosity level configuration
 
-### Implementation Notes
-Developer documentation:
+### Implementation Notes (`implementation/`)
+Technical implementation summaries and migration guides:
+
+- **[COMPUTER_USE_IMPLEMENTATION.md](implementation/COMPUTER_USE_IMPLEMENTATION.md)** - Computer Use integration details
+- **[OPENAI_RESPONSES_API_MIGRATION.md](implementation/OPENAI_RESPONSES_API_MIGRATION.md)** - Responses API migration summary
+- **[RESPONSES_API_IMPLEMENTATION_SUMMARY.md](implementation/RESPONSES_API_IMPLEMENTATION_SUMMARY.md)** - Responses API implementation details
+- **[OPENAI_MIGRATION_SUMMARY.md](implementation/OPENAI_MIGRATION_SUMMARY.md)** - OpenAI migration overview
+- **[VISION_INTEGRATION_SUMMARY.md](implementation/VISION_INTEGRATION_SUMMARY.md)** - Vision integration summary
+- **[AX_VISION_IMPLEMENTATION_SUMMARY.md](implementation/AX_VISION_IMPLEMENTATION_SUMMARY.md)** - AX + Vision implementation
+- **[AX_NAVIGATION_FIX_SUMMARY.md](implementation/AX_NAVIGATION_FIX_SUMMARY.md)** - AX navigation fixes
+
+### Project Documentation
+High-level project documentation:
 
 - **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Original implementation summary
 - **[IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)** - Agent implementation details
@@ -96,7 +109,8 @@ When contributing documentation:
 1. **Agent docs** → `agent/` - Natural language interface documentation
 2. **Extraction methods** → `extraction/` - Specific extraction techniques
 3. **Setup/config** → `guides/` - Installation and configuration
-4. **Implementation** → `docs/` root - Technical architecture and design
+4. **Implementation notes** → `implementation/` - Technical summaries and migration guides
+5. **Project docs** → `docs/` root - High-level architecture and design
 
 Keep documentation:
 - Clear and concise

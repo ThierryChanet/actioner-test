@@ -231,7 +231,7 @@ The system now provides exceptional performance with smooth mouse movements, nea
 ## References
 
 - Migration Guide: [`docs/agent/RESPONSES_API_MIGRATION.md`](docs/agent/RESPONSES_API_MIGRATION.md)
-- Implementation Details: [`COMPUTER_USE_IMPLEMENTATION.md`](COMPUTER_USE_IMPLEMENTATION.md)
+- Implementation Details: [`COMPUTER_USE_IMPLEMENTATION.md`](../implementation/COMPUTER_USE_IMPLEMENTATION.md)
 - Performance Benchmarks: Included in migration guide
 - OpenAI Responses API: https://platform.openai.com/docs/guides/responses
 - Computer Use Beta: https://platform.openai.com/docs/guides/tools-computer-use
