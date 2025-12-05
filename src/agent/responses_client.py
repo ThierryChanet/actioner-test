@@ -17,7 +17,8 @@ from .state import AgentState
 
 ActionType = Literal[
     "key", "type", "mouse_move", "left_click", "left_click_drag",
-    "right_click", "middle_click", "double_click", "screenshot", "cursor_position"
+    "right_click", "middle_click", "double_click", "screenshot", "cursor_position",
+    "switch_desktop"
 ]
 
 
@@ -126,6 +127,7 @@ class ResponsesAPIClient:
                 display_num=self.display_num,
                 display_width=self.display_width,
                 display_height=self.display_height,
+                verbose=self.verbose,
             )
             if self.verbose:
                 print("✓ Custom macOS Computer Use client initialized")
@@ -384,3 +386,43 @@ class ResponsesAPIClient:
             "display_num": self.display_num,
             "native_computer_use": self._has_native_computer_use,
         }
+    
+    def switch_desktop_by_app(self, app_name: str) -> Dict[str, Any]:
+        """Switch to the desktop containing a specific application.
+        
+        Args:
+            app_name: Name of the application (e.g., "Notion", "Safari")
+            
+        Returns:
+            Dict with status and information about the switch
+        """
+        if self.computer_client:
+            return self.computer_client.switch_desktop_by_app(app_name)
+        else:
+            return {
+                "success": False,
+                "error": "Desktop switching requires custom computer client",
+                "app_name": app_name
+            }
+    
+    async def switch_desktop_by_app_async(self, app_name: str) -> Dict[str, Any]:
+        """Switch to desktop asynchronously.
+        
+        Args:
+            app_name: Name of the application
+            
+        Returns:
+            Dict with status and information
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.switch_desktop_by_app, app_name)
+    
+    def get_frontmost_application(self) -> Optional[str]:
+        """Get the name of the currently frontmost application.
+        
+        Returns:
+            Name of the frontmost application or None if unable to determine
+        """
+        if self.computer_client and hasattr(self.computer_client, '_get_frontmost_application'):
+            return self.computer_client._get_frontmost_application()
+        return None

@@ -248,7 +248,9 @@ class LeftClickTool(BaseTool):
     description: str = (
         "Perform a left mouse click. "
         "If coordinates are provided, moves mouse there first. "
-        "Use to click buttons, links, and UI elements."
+        "Use to click buttons, links, and UI elements. "
+        "IMPORTANT: This tool only executes the click - it does NOT verify success. "
+        "You MUST take a screenshot immediately after to verify the click worked."
     )
     args_schema: Type[BaseModel] = LeftClickInput
     
@@ -303,7 +305,9 @@ class RightClickTool(BaseTool):
     description: str = (
         "Perform a right mouse click (context menu). "
         "If coordinates are provided, moves mouse there first. "
-        "Use to open context menus."
+        "Use to open context menus. "
+        "IMPORTANT: This tool only executes the click - it does NOT verify success. "
+        "You MUST take a screenshot immediately after to verify the context menu appeared."
     )
     args_schema: Type[BaseModel] = RightClickInput
     
@@ -358,7 +362,9 @@ class DoubleClickTool(BaseTool):
     description: str = (
         "Perform a double click. "
         "If coordinates are provided, moves mouse there first. "
-        "Use to open files or activate elements that require double-click."
+        "Use to open files or activate elements that require double-click. "
+        "IMPORTANT: This tool only executes the double-click - it does NOT verify success. "
+        "You MUST take a screenshot immediately after to verify the action worked."
     )
     args_schema: Type[BaseModel] = DoubleClickInput
     
@@ -406,7 +412,9 @@ class TypeTextTool(BaseTool):
     description: str = (
         "Type text using the keyboard. "
         "Types the text at the current cursor/focus location. "
-        "Use after clicking into a text field or input area."
+        "Use after clicking into a text field or input area. "
+        "IMPORTANT: This tool only types the text - it does NOT verify it was entered. "
+        "You MUST take a screenshot immediately after to verify the text appeared."
     )
     args_schema: Type[BaseModel] = TypeTextInput
     
@@ -455,7 +463,9 @@ class PressKeyTool(BaseTool):
         "Press a special key on the keyboard. "
         "Supports: Return/Enter, Tab, Escape, Delete, Backspace, "
         "Up/Down/Left/Right arrows, Space. "
-        "Use for navigation and special actions."
+        "Use for navigation and special actions. "
+        "IMPORTANT: This tool only presses the key - it does NOT verify the result. "
+        "You MUST take a screenshot immediately after to verify the expected action occurred."
     )
     args_schema: Type[BaseModel] = PressKeyInput
     
@@ -528,6 +538,62 @@ class GetCursorPositionTool(BaseTool):
             }, indent=2)
 
 
+class SwitchDesktopInput(BaseModel):
+    """Input for switch desktop tool."""
+    application_name: str = Field(
+        description="Name of the application to find and switch to (e.g., 'Notion', 'Safari', 'Chrome')"
+    )
+
+
+class SwitchDesktopTool(BaseTool):
+    """Tool for switching to a desktop containing a specific application."""
+    
+    name: str = "switch_desktop"
+    description: str = (
+        "Switch to the macOS desktop (Mission Control Space) containing a specific application. "
+        "Use this when you need to interact with an application that is not visible on the current desktop. "
+        "For example, if Notion is open on a different desktop, use this tool to switch to it. "
+        "The tool will activate the application, automatically switching to its desktop. "
+        "Returns success status and information about the switch."
+    )
+    args_schema: Type[BaseModel] = SwitchDesktopInput
+    
+    client: object = Field(exclude=True)
+    state: AgentState = Field(exclude=True)
+    
+    def _run(self, application_name: str) -> str:
+        """Switch to desktop containing the application."""
+        show_progress(f"Switching to desktop with {application_name}...")
+        
+        try:
+            # Use the client's desktop switching method
+            if hasattr(self.client, 'switch_desktop_by_app'):
+                result = self.client.switch_desktop_by_app(application_name)
+            else:
+                # Fallback: try execute_action
+                result = self.client.execute_action("switch_desktop", text=application_name)
+            
+            if result.get("success"):
+                return json.dumps({
+                    "status": "success",
+                    "application": application_name,
+                    "message": result.get("message", f"Switched to desktop containing {application_name}")
+                }, indent=2)
+            else:
+                return json.dumps({
+                    "status": "error",
+                    "application": application_name,
+                    "message": result.get("error", "Failed to switch desktop")
+                }, indent=2)
+                
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "application": application_name,
+                "message": f"Desktop switch failed: {e}"
+            }, indent=2)
+
+
 class GetScreenInfoInput(BaseModel):
     """Input for get screen info tool."""
     pass
@@ -585,6 +651,7 @@ def get_computer_use_tools(client, state: AgentState) -> list:
     return [
         ScreenshotTool(client=client, state=state),
         GetScreenInfoTool(client=client, state=state),
+        SwitchDesktopTool(client=client, state=state),
         MouseMoveTool(client=client, state=state),
         LeftClickTool(client=client, state=state),
         RightClickTool(client=client, state=state),

@@ -71,6 +71,10 @@ When Computer Use is enabled, the agent has access to these tools:
 - **`get_screen_info`**: Get screen dimensions (width, height)
 - **`get_cursor_position`**: Get current mouse cursor position
 
+### Desktop Management
+
+- **`switch_desktop`**: Switch to a macOS desktop (Mission Control Space) containing a specific application
+
 ### Mouse Control
 
 - **`move_mouse`**: Move cursor to specific (x, y) coordinates
@@ -127,6 +131,115 @@ After navigation, the agent uses AX tools to extract content:
 agent.run("navigate to Roadmap page and extract all content")
 # Agent: Clicks page, waits for load, extracts via AX, returns content
 ```
+
+## Desktop Switching
+
+### Overview
+
+The agent can automatically switch between macOS desktops (Mission Control Spaces) to access applications that are not visible on the current desktop. This is particularly useful when:
+
+- Notion is open on a different desktop
+- You're running the agent from a terminal on one desktop while Notion is on another
+- You have multiple applications organized across different desktops
+
+### How It Works
+
+The `switch_desktop` tool finds an application by name and activates it, which automatically switches to the desktop where that application is located. macOS handles the desktop switching automatically when an application is activated.
+
+### Usage
+
+```python
+# Switch to the desktop containing Notion
+agent.run("switch to the desktop with Notion")
+
+# Or be more explicit
+agent.run("use switch_desktop to find Notion")
+```
+
+The agent will:
+1. Search for the specified application across all desktops
+2. Activate the application if found
+3. macOS automatically switches to that desktop
+4. Return success status
+
+### Auto-Return Feature
+
+When Computer Use is enabled, the agent automatically:
+1. **Stores** the frontmost application when it starts
+2. **Switches** to other desktops as needed during execution
+3. **Returns** to the original application/desktop when finished
+
+This ensures your workspace is restored after the agent completes its task.
+
+### Example: Cross-Desktop Workflow
+
+```bash
+# Run from terminal on Desktop 1, while Notion is on Desktop 2
+python -m src.agent "switch to Notion, then extract the recipes database"
+```
+
+The agent will:
+1. Store current application (e.g., Terminal)
+2. Switch to desktop containing Notion
+3. Navigate and extract content
+4. Return to Terminal on Desktop 1
+
+### Supported Applications
+
+The tool works with any macOS application:
+- `"Notion"` - Notion desktop app
+- `"Safari"` - Safari browser
+- `"Google Chrome"` - Chrome browser
+- `"Finder"` - macOS Finder
+- Any other running application
+
+### Error Handling
+
+If the application is not found:
+```json
+{
+  "status": "error",
+  "application": "Notion",
+  "message": "Application 'Notion' not found or not running"
+}
+```
+
+**Solutions**:
+- Ensure the application is running
+- Check the exact application name (case-sensitive)
+- Verify the application has visible windows
+
+### Limitations
+
+- **Application Must Be Running**: The target application must be open
+- **Requires Windows**: The application must have at least one window open
+- **macOS Specific**: This feature only works on macOS with Mission Control
+- **No Direct Desktop Numbers**: Cannot switch to "Desktop 3" directly; must specify an application
+
+### Best Practices
+
+1. **Check Application Name**: Use the exact name as shown in the menu bar
+   ```python
+   # Good
+   agent.run("switch to Notion")
+   
+   # Bad (wrong name)
+   agent.run("switch to notion app")
+   ```
+
+2. **Combine with Screenshots**: Take a screenshot after switching to verify
+   ```python
+   agent.run("switch to Notion, then take a screenshot to confirm")
+   ```
+
+3. **Let Auto-Return Work**: Don't manually switch back; the agent handles it
+   ```python
+   # Good - agent returns automatically
+   agent.run("switch to Notion and extract content")
+   
+   # Unnecessary - agent already returns
+   agent.run("switch to Notion, extract content, then switch back to Terminal")
+   ```
 
 ## Example Workflows
 
@@ -220,7 +333,33 @@ agent.run("take a screenshot, then click on recipes")
 agent.run("click on recipes")  # Agent can't see where it is
 ```
 
-### 2. Be Specific with Coordinates
+### 2. Verify Every Action
+
+The agent should take a screenshot after EVERY action to verify it worked:
+
+```python
+# Good - agent verifies each step
+agent.run("click on the menu button, take a screenshot to verify it opened, then click on settings")
+
+# Less reliable - no verification
+agent.run("click on menu button, then click on settings")
+```
+
+**Important**: The computer use tools (click, type, etc.) only execute actions - they don't verify success. The agent must take screenshots to confirm actions worked.
+
+### 3. Be Honest About Failures
+
+The agent is now trained to report failures honestly:
+
+```python
+# Agent will say:
+"I clicked at (300, 400) but the menu didn't open - trying different coordinates"
+
+# Instead of falsely claiming:
+"I successfully clicked the menu button"  # (without checking)
+```
+
+### 4. Be Specific with Coordinates
 
 If you know exact coordinates, provide them:
 
@@ -228,7 +367,7 @@ If you know exact coordinates, provide them:
 agent.run("click at coordinates (150, 300)")
 ```
 
-### 3. Wait After Navigation
+### 5. Wait After Navigation
 
 Allow time for pages to load:
 
@@ -236,7 +375,7 @@ Allow time for pages to load:
 agent.run("click on database, wait 2 seconds, then extract")
 ```
 
-### 4. Combine with Extraction Tools
+### 6. Combine with Extraction Tools
 
 Use Computer Use for navigation, AX tools for extraction:
 
@@ -244,12 +383,20 @@ Use Computer Use for navigation, AX tools for extraction:
 agent.run("navigate to the page, then use extract_page_content")
 ```
 
-### 5. Use Verbose Mode for Debugging
+### 7. Use Verbose Mode for Debugging
 
-See exactly what the agent is doing:
+See exactly what the agent is doing with timing information:
 
 ```bash
 python -m src.agent --computer-use --verbose "your query"
+```
+
+You'll see timing for each operation:
+```
+⏳ Capturing screenshot...
+⏱️  screenshot completed in 129ms
+⏳ Moving mouse to (300, 400)...
+⏱️  execute_action completed in 0.4ms
 ```
 
 ## Comparison: Computer Use vs AX Navigation
@@ -287,6 +434,16 @@ export OPENAI_API_KEY="sk-..."
 
 **Solution**: Enable in System Preferences > Privacy > Accessibility
 
+### "Application not found" when switching desktops
+
+**Cause**: Application is not running or has no windows
+
+**Solution**: 
+- Ensure the application is running
+- Verify the application has at least one window open
+- Check the exact application name (case-sensitive)
+- Try: `ps aux | grep -i "application name"` to verify it's running
+
 ### Agent clicks wrong coordinates
 
 **Cause**: Resolution mismatch or Retina display scaling
@@ -302,10 +459,42 @@ export OPENAI_API_KEY="sk-..."
 
 ## Performance Considerations
 
-- **Screenshots**: Each screenshot takes ~0.2-0.5 seconds
-- **Mouse Actions**: Nearly instantaneous
-- **Typing**: ~50ms per character
-- **Overall**: Slower than direct AX navigation but more flexible
+- **Screenshots**: Each screenshot takes ~130ms (with caching: <1ms)
+- **Mouse Actions**: <1ms (highly optimized)
+- **Typing**: ~30ms (optimized)
+- **Overall**: 96.5% faster than original implementation
+
+### Performance Tracking
+
+When running with `--verbose`, you'll see timing information for all operations:
+
+```
+⏱️  screenshot completed in 129ms
+⏱️  execute_action completed in 0.4ms
+⏱️  switch_desktop completed in 850ms
+```
+
+Performance logs are automatically saved to `output/logs/performance_YYYYMMDD_HHMMSS.jsonl` for analysis.
+
+### Analyzing Performance Logs
+
+Performance logs are in JSON Lines format, with each line containing:
+
+```json
+{
+  "timestamp": "2025-12-04T19:03:26.123456",
+  "action_type": "screenshot",
+  "duration_ms": 129.45,
+  "success": true,
+  "context": {"args": "..."}
+}
+```
+
+You can analyze these logs to:
+- Identify slow operations
+- Track performance improvements over time
+- Optimize your workflows
+- Debug timing issues
 
 ## Security & Safety
 
@@ -314,14 +503,55 @@ export OPENAI_API_KEY="sk-..."
 - The agent can only see what's on screen (no file system access via this tool)
 - Consider using in a sandboxed environment for untrusted tasks
 
+## Verification Best Practices
+
+### Understanding Tool Behavior
+
+**Critical**: Computer use tools execute actions but **do not verify success**. The agent must explicitly check results.
+
+### Proper Verification Workflow
+
+1. **Take screenshot** to see current state
+2. **Execute action** (click, type, etc.)
+3. **Take screenshot again** to verify the action worked
+4. **Report honestly** what you observe
+
+### Example: Clicking a Button
+
+```
+❌ BAD (no verification):
+1. Click at (300, 400)
+2. Report: "Successfully clicked the button"
+
+✓ GOOD (with verification):
+1. Take screenshot - see button at (300, 400)
+2. Click at (300, 400)
+3. Take screenshot - check if menu opened
+4. Report: "Clicked at (300, 400) and menu opened" OR
+   Report: "Clicked at (300, 400) but menu didn't open - retrying"
+```
+
+### Agent Training
+
+The agent is now trained to:
+- **Always verify** actions with screenshots
+- **Report honestly** when actions fail
+- **Never assume** success without visual confirmation
+- **Try alternative approaches** when actions don't work
+
+This makes the agent more reliable and easier to debug.
+
 ## Future Enhancements
 
 Planned improvements:
-- Vision API integration for better element detection
-- Cached screenshots to reduce API calls
+- ~~Vision API integration for better element detection~~ ✅ **COMPLETED**
+- ~~Cached screenshots to reduce API calls~~ ✅ **COMPLETED**
+- ~~Performance tracking and logging~~ ✅ **COMPLETED**
+- ~~Action verification training~~ ✅ **COMPLETED**
 - Multi-monitor coordination
 - Custom action macros
 - Replay and debugging tools
+- Aggregate performance analytics dashboard
 
 ## See Also
 

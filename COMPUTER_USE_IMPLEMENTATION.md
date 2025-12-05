@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully integrated **OpenAI's Responses API with Computer Use support** into the Notion agent, providing general-purpose computer control through mouse clicks, keyboard input, and screenshots with significant performance optimizations.
+Successfully integrated **OpenAI's Responses API with Computer Use support** into the Notion agent, enabling general-purpose computer control through mouse clicks, keyboard input, and screenshots—all with substantial performance optimizations. **Computer Use is enabled by default and available unless explicitly turned off.**
 
 ## Implementation Timeline
 
@@ -71,6 +71,7 @@ Successfully integrated **OpenAI's Responses API with Computer Use support** int
 - 9 tools implementing computer control:
   - `ScreenshotTool`: Capture screen with vision AI analysis + **caching support**
   - `GetScreenInfoTool`: Get display dimensions + implementation type
+  - `SwitchDesktopTool`: Switch to macOS desktop containing a specific application
   - `MouseMoveTool`: Move cursor with **latency tracking**
   - `LeftClickTool`: Left click with **latency tracking**
   - `RightClickTool`: Right click with **latency tracking**
@@ -129,7 +130,7 @@ Successfully integrated **OpenAI's Responses API with Computer Use support** int
 - Computer Use mode: Enhanced prompt with screenshot-first workflow and coordinate-based actions
 
 **Vision Integration:**
-- Automatically uses GPT-4o model when `computer_use=True`
+- Automatically uses GPT-4o model when Computer Use is enabled (default behavior)
 - Screenshot tool uses Responses API vision capabilities
 - Agent receives detailed descriptions of UI elements, text, and layout
 
@@ -145,9 +146,9 @@ Successfully integrated **OpenAI's Responses API with Computer Use support** int
 
 **CLI Flags:**
 ```bash
---computer-use    Enable Computer Use API for screen control
---display N       Display number (default: 1)
---model M         Specific OpenAI model to use
+--no-computer-use    Disable Computer Use API (default: enabled)
+--display N          Display number (default: 1)
+--model M            Specific OpenAI model to use
 ```
 
 #### 3. `requirements.txt`
@@ -176,8 +177,8 @@ Successfully integrated **OpenAI's Responses API with Computer Use support** int
 
 #### 1. Tool Coexistence Strategy
 - **Chosen**: Replace navigation tools, keep extraction tools
-- Computer Use mode: Screenshot + mouse/keyboard + AX extraction
-- Standard mode: AX navigation + AX extraction
+- Computer Use enabled (default): Screenshot + mouse/keyboard + AX extraction
+- Opt-out mode: AX navigation + AX extraction
 - Rationale: Computer Use for navigation is more flexible; AX for extraction is faster and more reliable
 
 #### 2. LangChain Integration
@@ -194,10 +195,10 @@ Successfully integrated **OpenAI's Responses API with Computer Use support** int
 - Rationale: Separation of concerns, testability, reusability
 
 #### 4. Activation Model
-- **Chosen**: Opt-out via `--no-computer-use` flag (Computer Use is enabled by default)
+- **Chosen**: Opt-out via `--no-computer-use` flag (**Computer Use enabled by default**)
 - Default behavior unchanged (backward compatible)
-- Explicit activation for safety
-- Rationale: Computer Use provides full control; should require explicit consent
+- Computer Use is on unless **explicitly** disabled for safety
+- Rationale: Computer Use provides full control; user may opt out at their discretion
 
 #### 5. Screen Interaction Method
 - **Chosen**: macOS native APIs (Quartz, Cocoa, AppleScript)
@@ -220,7 +221,7 @@ Successfully integrated **OpenAI's Responses API with Computer Use support** int
 
 ## Usage Examples
 
-**Note: Computer Use is ENABLED BY DEFAULT!**
+**Note: Computer Use is ENABLED BY DEFAULT! To use standard AX navigation, add `--no-computer-use`.**
 
 ### Basic Screenshot with Vision Analysis
 ```bash
@@ -288,6 +289,14 @@ agent = create_agent(
 - Supports text typing with proper escaping
 - Special key mapping (Return, Tab, arrows, etc.)
 - Alternative to CGEvent keyboard events (more reliable)
+
+### Desktop Switching (NEW - December 4, 2025)
+- **Application-Based Switching**: Find and switch to desktop containing a specific app
+- **Auto-Return**: Automatically returns to original desktop after task completion
+- **AppleScript Integration**: Uses application activation to trigger desktop switch
+- **Frontmost Tracking**: Stores and restores the original frontmost application
+- **Cross-Desktop Workflows**: Enables automation across Mission Control Spaces
+- **Error Handling**: Graceful handling when application not found or not running
 
 ### Error Handling
 - Graceful fallback to standard tools if Computer Use initialization fails
@@ -357,7 +366,7 @@ export NOTION_TOKEN="secret_..."
 ## Security Considerations
 
 1. **Full Control**: Computer Use provides complete control of the computer
-2. **Opt-in Required**: Must explicitly enable with `--computer-use`
+2. **Opt-out Support**: Computer Use is enabled by default; disable with `--no-computer-use`
 3. **API Key Required**: Only works with valid OpenAI API key
 4. **Local Execution**: All actions execute locally (no remote control)
 5. **Screen Visibility**: Agent can only see what's on screen
@@ -370,14 +379,15 @@ Potential improvements identified during implementation:
 1. ~~**Performance Optimization**: Reduce delays and optimize operations~~ ✅ **COMPLETED** (96.5% improvement)
 2. ~~**Screenshot Caching**: Cache screenshots to reduce API calls~~ ✅ **COMPLETED** (2s TTL cache)
 3. ~~**Async Operations**: Add async support for better concurrency~~ ✅ **COMPLETED** (Full async/await)
-4. **Streaming Responses**: Use Responses API streaming for real-time feedback
-5. **Background Mode**: Leverage Responses API background mode for long tasks
-6. **Reasoning Summaries**: Use reasoning summaries from Responses API for debugging
-7. **Coordinate Caching**: Cache UI element positions between actions
-8. **Action Recording**: Record action sequences for replay
-9. **Multi-Monitor**: Better handling of multiple displays
-10. **Gesture Support**: Add swipe, pinch, rotate gestures
-11. **Safety Rails**: Add confirmation prompts for destructive actions
+4. ~~**Desktop Switching**: Switch between macOS desktops by application~~ ✅ **COMPLETED** (December 4, 2025)
+5. **Streaming Responses**: Use Responses API streaming for real-time feedback
+6. **Background Mode**: Leverage Responses API background mode for long tasks
+7. **Reasoning Summaries**: Use reasoning summaries from Responses API for debugging
+8. **Coordinate Caching**: Cache UI element positions between actions
+9. **Action Recording**: Record action sequences for replay
+10. **Multi-Monitor**: Better handling of multiple displays
+11. **Gesture Support**: Add swipe, pinch, rotate gestures
+12. **Safety Rails**: Add confirmation prompts for destructive actions
 
 ## Known Limitations
 
@@ -396,25 +406,30 @@ Potential improvements identified during implementation:
 python -m src.agent "list all pages"
 ```
 
-**After (Computer Use Mode):**
+**After (Computer Use Enabled by Default):**
 ```bash
-python -m src.agent --computer-use "take a screenshot and tell me what pages are visible"
+python -m src.agent "take a screenshot and tell me what pages are visible"
+```
+
+**To Opt-Out (standard AX navigation only):**
+```bash
+python -m src.agent --no-computer-use "extract content"
 ```
 
 ### For Developers
 
-**Standard Mode:**
+**Computer Use Enabled (Default):**
 ```python
 agent = create_agent()
 response = agent.run("navigate to page X")
 ```
 
-**Computer Use Mode:**
+**Opt-Out (AX navigation only):**
 ```python
 agent = create_agent(
-    computer_use=True
+    computer_use=False
 )
-response = agent.run("click on page X in the sidebar")
+response = agent.run("extract content")
 ```
 
 ## Documentation Files
@@ -430,10 +445,10 @@ All documentation has been updated:
 
 ✅ **Fully Backward Compatible**
 
-- Default behavior unchanged
+- Default behavior unchanged: Computer Use is now enabled by default
 - Standard tools still work
 - No breaking changes
-- Computer Use is opt-in only
+- Computer Use is opt-out
 - Existing scripts continue to work
 
 ## Summary
@@ -445,13 +460,15 @@ The Computer Use integration powered by OpenAI's Responses API provides powerful
 3. ✅ **Vision AI Integration**: Screenshots automatically analyzed by GPT-4o
 4. ✅ **Intelligent Screen Understanding**: Agent receives detailed descriptions of UI elements
 5. ✅ **Flexible Interaction**: Supports clicks, typing, and keyboard shortcuts
-6. ✅ **Simplified Architecture**: OpenAI-only implementation (no dual-provider complexity)
-7. ✅ **Native Computer Use Support**: Uses OpenAI's native tools when available
-8. ✅ **Exceptional Performance**: 96.5% improvement with optimizations
-9. ✅ **Async Operations**: Full async/await support for non-blocking execution
-10. ✅ **Smart Caching**: Screenshot caching with 100% time savings on cache hits
-11. ✅ **Well Documented**: Comprehensive docs, migration guides, and examples
-12. ✅ **Production Ready**: Error handling, fallbacks, and safety measures
+6. ✅ **Desktop Switching**: Automatically switch between macOS desktops by application
+7. ✅ **Auto-Return**: Returns to original desktop/application after task completion
+8. ✅ **Simplified Architecture**: OpenAI-only implementation (no dual-provider complexity)
+9. ✅ **Native Computer Use Support**: Uses OpenAI's native tools when available
+10. ✅ **Exceptional Performance**: 96.5% improvement with optimizations
+11. ✅ **Async Operations**: Full async/await support for non-blocking execution
+12. ✅ **Smart Caching**: Screenshot caching with 100% time savings on cache hits
+13. ✅ **Well Documented**: Comprehensive docs, migration guides, and examples
+14. ✅ **Production Ready**: Error handling, fallbacks, and safety measures
 
 ### Performance Highlights
 
@@ -465,5 +482,7 @@ The Computer Use integration powered by OpenAI's Responses API provides powerful
 
 The implementation uses OpenAI's **Responses API with Computer Use** for navigation, automatically falling back to a highly-optimized custom macOS implementation when needed. It preserves the fast AX extraction tools, creating a hybrid approach that combines the best of both worlds with a unified, high-performance LLM provider.
 
-**Latest Update (Dec 4, 2025):** Completed migration to Responses API with native Computer Use support, achieving 96.5% performance improvement through optimized delays, async operations, and smart caching. The system seamlessly switches between native OpenAI Computer Use and custom macOS implementation based on availability.
+**Latest Updates:**
+- **Dec 4, 2025 (Performance):** Completed migration to Responses API with native Computer Use support, achieving 96.5% performance improvement through optimized delays, async operations, and smart caching. The system seamlessly switches between native OpenAI Computer Use and custom macOS implementation based on availability.
+- **Dec 4, 2025 (Desktop Switching):** Added ability to switch between macOS desktops by application name, with automatic return to original desktop after task completion. Enables cross-desktop automation workflows.
 

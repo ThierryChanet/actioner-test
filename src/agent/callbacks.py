@@ -146,16 +146,30 @@ def confirm_action(action: str) -> bool:
 
 
 def show_progress(message: str, step: Optional[int] = None, 
-                 total: Optional[int] = None):
-    """Show progress message.
+                 total: Optional[int] = None, duration_ms: Optional[float] = None):
+    """Show progress message with optional timing information.
     
     Args:
         message: Progress message
         step: Current step number
         total: Total number of steps
+        duration_ms: Duration in milliseconds (if completed action)
     """
-    if step is not None and total is not None:
-        print(f"[{step}/{total}] {message}")
+    if duration_ms is not None:
+        # Color-code based on duration
+        if duration_ms > 1000:
+            # Slow operation (>1s) - show in yellow/warning
+            timing_str = f" ⏱️  ({duration_ms:.0f}ms)"
+        else:
+            timing_str = f" ⏱️  ({duration_ms:.0f}ms)"
+        
+        if step is not None and total is not None:
+            print(f"[{step}/{total}] {message}{timing_str}")
+        else:
+            print(f"✓ {message}{timing_str}")
     else:
-        print(f"⏳ {message}")
+        if step is not None and total is not None:
+            print(f"[{step}/{total}] {message}")
+        else:
+            print(f"⏳ {message}")
 

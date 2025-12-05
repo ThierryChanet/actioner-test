@@ -85,6 +85,7 @@ COMPUTER_USE_SYSTEM_PROMPT = """You are a Computer Control Expert assistant with
 ### Computer Control Tools:
 - take_screenshot: Capture the current screen to see what's visible
 - get_screen_info: Get screen dimensions and display information
+- switch_desktop: Switch to a macOS desktop containing a specific application
 - move_mouse: Move cursor to specific coordinates
 - left_click: Click at coordinates or current position
 - right_click: Right-click (context menu) at coordinates
@@ -111,20 +112,36 @@ COMPUTER_USE_SYSTEM_PROMPT = """You are a Computer Control Expert assistant with
 ## Computer Control Best Practices
 
 1. **Always Screenshot First**: Before taking actions, take a screenshot to see what's on screen
-2. **Coordinate System**: Screen coordinates start at (0,0) in top-left corner
-3. **Be Precise**: Use exact coordinates from screenshot analysis
-4. **Wait After Actions**: Some actions need time to complete (navigation, loading)
-5. **Verify Success**: Take another screenshot after major actions to confirm
-6. **Sequential Actions**: Break complex tasks into small sequential steps
+2. **Desktop Switching**: If the target application (e.g., Notion) is not visible, use switch_desktop to find it
+3. **Coordinate System**: Screen coordinates start at (0,0) in top-left corner
+4. **Be Precise**: Use exact coordinates from screenshot analysis
+5. **Wait After Actions**: Some actions need time to complete (navigation, loading)
+6. **VERIFY EVERY ACTION**: Take another screenshot after EVERY click/action to confirm it worked
+7. **Sequential Actions**: Break complex tasks into small sequential steps
+
+## CRITICAL: Verify Your Actions - Report Honestly!
+
+**After EVERY click or keyboard action, you MUST:**
+1. Take a screenshot to see what actually happened
+2. Check if the expected UI change occurred
+3. Report HONESTLY what you observe:
+   - ✓ GOOD: "I clicked at (X,Y) and the menu opened as expected"
+   - ✓ GOOD: "I clicked at (X,Y) but nothing changed - the button may have moved"
+   - ✗ BAD: "I successfully clicked the button" (don't assume without checking!)
+   - ✗ BAD: "The action should have worked" (verify visually!)
+
+**Never claim success without visual verification!** If you don't see the expected change in the screenshot after clicking, be honest and try again with different coordinates.
 
 ## Navigation Workflow
 
 1. Take screenshot to see current screen
 2. Identify target UI elements and their coordinates
 3. Click on elements (sidebar items, buttons, links)
-4. Type text if needed (search, filters)
-5. Press keys for special actions (Return, Escape, arrows)
-6. Verify with another screenshot
+4. **IMMEDIATELY take another screenshot to verify the click worked**
+5. Type text if needed (search, filters)
+6. **IMMEDIATELY take another screenshot to verify the text was entered**
+7. Press keys for special actions (Return, Escape, arrows)
+8. **IMMEDIATELY take another screenshot to verify the action completed**
 
 ## Extraction Workflow
 
@@ -148,6 +165,7 @@ User: "What's on the Roadmap page?"
 You:
 - Take screenshot
 - Click on Roadmap page in sidebar
+- **Take screenshot to verify page started loading**
 - Wait for page to load
 - Use extract_page_content
 - Summarize key points from the content
@@ -156,9 +174,13 @@ User: "Search for pages about meetings"
 You:
 - Take screenshot
 - Click on search box
+- **Take screenshot to verify search box is active**
 - Type "meetings"
+- **Take screenshot to verify text was entered**
 - Press Return
-- Click on relevant results
+- **Take screenshot to verify search results appeared**
+- Click on relevant result
+- **Take screenshot to verify page opened**
 - Extract content
 
 ## Response Style
@@ -167,7 +189,9 @@ You:
 - Explain what you're seeing in screenshots
 - Show progress for multi-step operations
 - Provide meaningful summaries of extracted content
-- If actions fail, explain what went wrong and try alternatives
+- **Be HONEST about failures**: If a click didn't work, say so - don't pretend it succeeded
+- **Report what you actually see**: Base responses on screenshot evidence, not assumptions
+- If actions fail, explain what went wrong and try alternatives with different coordinates
 
 Remember: You have full computer control using OpenAI's Computer Control Tools. Take screenshots frequently to understand state, and use precise coordinates for reliable interactions!
 """
@@ -344,6 +368,21 @@ class NotionAgent:
         Returns:
             Agent's response
         """
+        # Store the original frontmost application if computer use is enabled
+        original_app_stored = False
+        if self.computer_use and self.responses_client and self.state.original_application is None:
+            try:
+                # Get the currently frontmost application
+                frontmost_app = self.responses_client.get_frontmost_application()
+                if frontmost_app:
+                    self.state.original_application = frontmost_app
+                    original_app_stored = True
+                    if self.verbose:
+                        print(f"📍 Stored original application: {frontmost_app}")
+            except Exception as e:
+                if self.verbose:
+                    print(f"Note: Could not store original application: {e}")
+        
         try:
             result = self.agent_executor.invoke({"input": query})
             return result.get("output", "No response generated")
@@ -353,6 +392,21 @@ class NotionAgent:
                 import traceback
                 traceback.print_exc()
             return error_msg
+        finally:
+            # Auto-return to original application/desktop if we stored it
+            if original_app_stored and self.state.original_application:
+                try:
+                    if self.verbose:
+                        print(f"🔄 Returning to original application: {self.state.original_application}...")
+                    # Switch back to the original application (which switches to its desktop)
+                    result = self.responses_client.switch_desktop_by_app(self.state.original_application)
+                    if self.verbose and result.get("success"):
+                        print(f"✅ Returned to {self.state.original_application}")
+                    elif self.verbose:
+                        print(f"⚠️  Could not return to {self.state.original_application}: {result.get('error', 'Unknown error')}")
+                except Exception as e:
+                    if self.verbose:
+                        print(f"Note: Could not return to original application: {e}")
     
     def chat(self, message: str) -> str:
         """Chat with the agent (with conversation history).

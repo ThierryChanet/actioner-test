@@ -1,0 +1,7 @@
+{"type": "header", "timestamp": "2025-12-05T07:36:09.592822", "version": "1.0", "format": "jsonl"}
+{"timestamp": "2025-12-05T07:36:09.593533", "action_type": "switch_desktop", "duration_ms": 937.7, "success": true, "context": {"args": "('Notion',)"}}
+{"timestamp": "2025-12-05T07:36:10.454264", "action_type": "screenshot", "duration_ms": 156.17, "success": true}
+{"timestamp": "2025-12-05T07:36:19.659930", "action_type": "execute_action", "duration_ms": 33.84, "success": true}
+{"timestamp": "2025-12-05T07:36:20.243916", "action_type": "execute_action", "duration_ms": 34.34, "success": true}
+{"timestamp": "2025-12-05T07:36:21.391516", "action_type": "screenshot", "duration_ms": 111.24, "success": true}
+{"timestamp": "2025-12-05T07:36:35.283051", "action_type": "switch_desktop", "duration_ms": 837.2, "success": true, "context": {"args": "('Cursor',)"}}

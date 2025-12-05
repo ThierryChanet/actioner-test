@@ -29,6 +29,15 @@ class AgentState:
     last_screenshot_timestamp: Optional[float] = None
     """Timestamp of last screenshot"""
     
+    original_desktop: Optional[int] = None
+    """Desktop number where the agent started (for auto-return)"""
+    
+    current_desktop: Optional[int] = None
+    """Current desktop number (if known)"""
+    
+    original_application: Optional[str] = None
+    """Name of the frontmost application when agent started (for auto-return)"""
+    
     def update_current_page(self, page_title: str):
         """Update the current page and add to history."""
         if self.current_page:
