@@ -564,7 +564,7 @@ class SwitchDesktopTool(BaseTool):
     def _run(self, application_name: str) -> str:
         """Switch to desktop containing the application."""
         show_progress(f"Switching to desktop with {application_name}...")
-        
+
         try:
             # Use the client's desktop switching method
             if hasattr(self.client, 'switch_desktop_by_app'):
@@ -572,20 +572,32 @@ class SwitchDesktopTool(BaseTool):
             else:
                 # Fallback: try execute_action
                 result = self.client.execute_action("switch_desktop", text=application_name)
-            
-            if result.get("success"):
+
+            # Handle both ActionResult objects and dictionaries
+            if hasattr(result, 'success'):
+                # ActionResult object (Anthropic client)
+                success = result.success
+                error_msg = result.error if hasattr(result, 'error') else None
+                data = result.data if hasattr(result, 'data') else {}
+            else:
+                # Dictionary (OpenAI client)
+                success = result.get("success", False)
+                error_msg = result.get("error")
+                data = result
+
+            if success:
                 return json.dumps({
                     "status": "success",
                     "application": application_name,
-                    "message": result.get("message", f"Switched to desktop containing {application_name}")
+                    "message": data.get("message", f"Switched to desktop containing {application_name}") if isinstance(data, dict) else f"Switched to desktop containing {application_name}"
                 }, indent=2)
             else:
                 return json.dumps({
                     "status": "error",
                     "application": application_name,
-                    "message": result.get("error", "Failed to switch desktop")
+                    "message": error_msg or data.get("error", "Failed to switch desktop") if isinstance(data, dict) else "Failed to switch desktop"
                 }, indent=2)
-                
+
         except Exception as e:
             return json.dumps({
                 "status": "error",

@@ -35,41 +35,63 @@ from .core import create_agent
               type=int,
               default=1,
               help='Display number for Computer Use (default: 1)')
+@click.option('--provider', '-p',
+              type=click.Choice(['openai', 'anthropic', 'auto'], case_sensitive=False),
+              default='auto',
+              help='LLM provider (openai, anthropic, or auto-detect)')
 @click.pass_context
 def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, verbosity,
-        no_computer_use, display):
-    """Notion Agent - Intelligent extraction assistant (powered by OpenAI).
-    
+        no_computer_use, display, provider):
+    """Notion Agent - Intelligent extraction assistant.
+
     Computer Use is ENABLED by default for screen control via clicks/keyboard.
-    
+
     Examples:
-    
+
         # One-shot query (Computer Use enabled by default)
         python -m src.agent "extract all recipes from my database"
-        
+
         # Interactive mode
         python -m src.agent --interactive
-        
+
+        # Use Anthropic Claude (auto-detected with ANTHROPIC_API_KEY)
+        python -m src.agent --provider=anthropic "extract recipes"
+
+        # Use OpenAI (auto-detected with OPENAI_API_KEY)
+        python -m src.agent --provider=openai "extract recipes"
+
         # Minimal output (timestamps only)
         python -m src.agent --verbosity=minimal "extract recipes"
-        
+
         # Silent mode (errors only)
         python -m src.agent --verbosity=silent "extract recipes"
-        
+
         # Disable Computer Use (use standard AX navigation)
         python -m src.agent --no-computer-use "navigate to recipes"
-        
+
         # With specific model
         python -m src.agent --model gpt-4 "what's on the roadmap page?"
-        
+
         # Help
         python -m src.agent --help
     """
-    # Check for OpenAI API key
-    if not os.environ.get('OPENAI_API_KEY'):
-        click.echo("❌ Error: OPENAI_API_KEY environment variable required")
-        click.echo("   Set it with: export OPENAI_API_KEY='your-key'")
-        sys.exit(1)
+    # Check for API keys based on provider
+    if provider == 'auto':
+        # Auto-detect: check for either key
+        if not os.environ.get('ANTHROPIC_API_KEY') and not os.environ.get('OPENAI_API_KEY'):
+            click.echo("❌ Error: No API key found")
+            click.echo("   Set ANTHROPIC_API_KEY or OPENAI_API_KEY")
+            sys.exit(1)
+    elif provider == 'anthropic':
+        if not os.environ.get('ANTHROPIC_API_KEY'):
+            click.echo("❌ Error: ANTHROPIC_API_KEY environment variable required")
+            click.echo("   Set it with: export ANTHROPIC_API_KEY='your-key'")
+            sys.exit(1)
+    elif provider == 'openai':
+        if not os.environ.get('OPENAI_API_KEY'):
+            click.echo("❌ Error: OPENAI_API_KEY environment variable required")
+            click.echo("   Set it with: export OPENAI_API_KEY='your-key'")
+            sys.exit(1)
     
     # Computer Use is enabled by default
     computer_use = not no_computer_use
@@ -94,6 +116,7 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, verbo
             verbosity=verbosity,
             computer_use=computer_use,
             display_num=display,
+            llm_provider=provider,
         )
     except Exception as e:
         click.echo(f"❌ Failed to initialize agent: {e}")

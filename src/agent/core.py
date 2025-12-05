@@ -22,8 +22,16 @@ from .computer_use_client import ComputerUseClient
 from .computer_use_tools import get_computer_use_tools
 from .responses_client import ResponsesAPIClient
 
+# Import Anthropic client if available
+try:
+    from .anthropic_computer_client import AnthropicComputerClient, ANTHROPIC_AVAILABLE
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+    AnthropicComputerClient = None
+
 
 VerbosityLevel = Literal["silent", "minimal", "default", "verbose"]
+LLMProvider = Literal["openai", "anthropic", "auto"]
 
 
 SYSTEM_PROMPT = """You are a Notion Extraction Expert assistant. You help users extract and analyze content from their Notion workspace using the macOS Notion app.
@@ -213,9 +221,10 @@ class NotionAgent:
         verbosity: VerbosityLevel = "default",
         computer_use: bool = True,
         display_num: int = 1,
+        llm_provider: LLMProvider = "auto",
     ):
         """Initialize the Notion agent.
-        
+
         Args:
             notion_token: Optional Notion API token
             output_dir: Directory for output files
@@ -225,15 +234,30 @@ class NotionAgent:
             verbosity: Verbosity level (silent, minimal, default, verbose)
             computer_use: Enable Computer Use API for screen control (default: True)
             display_num: Display number for Computer Use (1-based)
+            llm_provider: LLM provider (openai, anthropic, or auto)
         """
         # Handle deprecated verbose parameter
         if verbose and verbosity == "default":
             verbosity = "verbose"
-        
+
         self.verbosity = verbosity
         self.verbose = verbosity == "verbose"  # For backward compatibility
         self.output_dir = output_dir
         self.computer_use = computer_use
+        self.llm_provider = llm_provider
+
+        # Auto-detect provider if set to auto
+        if llm_provider == "auto":
+            if ANTHROPIC_AVAILABLE and os.environ.get("ANTHROPIC_API_KEY"):
+                self.llm_provider = "anthropic"
+                if self.verbose:
+                    print("✓ Auto-detected Anthropic (ANTHROPIC_API_KEY found)")
+            elif os.environ.get("OPENAI_API_KEY"):
+                self.llm_provider = "openai"
+                if self.verbose:
+                    print("✓ Auto-detected OpenAI (OPENAI_API_KEY found)")
+            else:
+                raise ValueError("No API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY")
         
         # Initialize orchestrator
         self.orchestrator = NotionOrchestrator(
@@ -248,24 +272,43 @@ class NotionAgent:
         # Initialize Computer Use client if enabled
         self.computer_client = None
         self.responses_client = None
+        self.anthropic_client = None
+
         if computer_use:
             try:
-                # Try new Responses API client first
-                from .responses_client import ResponsesAPIClient
-                self.responses_client = ResponsesAPIClient(
-                    display_width=1920,  # TODO: Make configurable
-                    display_height=1080,
-                    use_native_computer_use=True,
-                    verbose=self.verbose,
-                    verbosity=self.verbosity
-                )
-                # Keep reference to underlying custom client if used
-                self.computer_client = self.responses_client.custom_client
-                if self.verbose:
-                    if self.responses_client.native_computer_use_available:
-                        print("✅ Using OpenAI native Computer Use (Responses API)")
-                    else:
-                        print("✅ Using custom macOS Computer Use implementation")
+                if self.llm_provider == "anthropic":
+                    # Use Anthropic Computer Use
+                    if not ANTHROPIC_AVAILABLE:
+                        raise ImportError("Anthropic package not installed")
+
+                    self.anthropic_client = AnthropicComputerClient(
+                        display_width=1920,  # TODO: Make configurable
+                        display_height=1080,
+                        display_num=display_num,
+                        verbose=self.verbose,
+                        verbosity=self.verbosity
+                    )
+                    if self.verbose:
+                        print("✅ Using Anthropic Computer Use")
+
+                else:
+                    # Use OpenAI Responses API client
+                    from .responses_client import ResponsesAPIClient
+                    self.responses_client = ResponsesAPIClient(
+                        display_width=1920,  # TODO: Make configurable
+                        display_height=1080,
+                        use_native_computer_use=True,
+                        verbose=self.verbose,
+                        verbosity=self.verbosity
+                    )
+                    # Keep reference to underlying custom client if used
+                    self.computer_client = self.responses_client.computer_client
+                    if self.verbose:
+                        if self.responses_client._has_native_computer_use:
+                            print("✅ Using OpenAI native Computer Use (Responses API)")
+                        else:
+                            print("✅ Using custom macOS Computer Use implementation")
+
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: Computer Use initialization failed: {e}")
@@ -276,11 +319,14 @@ class NotionAgent:
         self.llm = self._init_llm(model, temperature)
         
         # Initialize tools (computer use or standard)
-        if self.computer_use and self.responses_client:
+        if self.computer_use and (self.responses_client or self.anthropic_client):
             # Computer use tools + extraction tools
             from .tools import ExtractPageContentTool, ExtractDatabaseTool, GetCurrentContextTool, AskUserTool
-            # Pass the responses_client which handles both native and custom implementations
-            computer_tools = get_computer_use_tools(self.responses_client, self.state)
+
+            # Use the appropriate client for computer tools
+            computer_client = self.anthropic_client if self.anthropic_client else self.responses_client
+            computer_tools = get_computer_use_tools(computer_client, self.state)
+
             extraction_tools = [
                 ExtractPageContentTool(orchestrator=self.orchestrator, state=self.state),
                 ExtractDatabaseTool(orchestrator=self.orchestrator, state=self.state),
@@ -517,9 +563,10 @@ def create_agent(
     verbosity: VerbosityLevel = "default",
     computer_use: bool = True,
     display_num: int = 1,
+    llm_provider: LLMProvider = "auto",
 ) -> NotionAgent:
     """Create a Notion agent instance.
-    
+
     Args:
         model: Specific model name or None for default (uses OpenAI)
         notion_token: Optional Notion API token
@@ -528,7 +575,8 @@ def create_agent(
         verbosity: Verbosity level (silent, minimal, default, verbose)
         computer_use: Enable Computer Use API for screen control (default: True)
         display_num: Display number for Computer Use (1-based)
-        
+        llm_provider: LLM provider (openai, anthropic, or auto)
+
     Returns:
         NotionAgent instance
     """
@@ -540,5 +588,6 @@ def create_agent(
         verbosity=verbosity,
         computer_use=computer_use,
         display_num=display_num,
+        llm_provider=llm_provider,
     )
 
