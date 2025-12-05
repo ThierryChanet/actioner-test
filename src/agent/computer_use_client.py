@@ -16,6 +16,8 @@ ActionType = Literal["key", "type", "mouse_move", "left_click", "left_click_drag
                       "right_click", "middle_click", "double_click", "screenshot", 
                       "cursor_position", "switch_desktop"]
 
+VerbosityLevel = Literal["silent", "minimal", "default", "verbose"]
+
 
 def log_timing(action_name: str):
     """Decorator to log action timing."""
@@ -73,6 +75,7 @@ class ComputerUseClient:
         display_width: Optional[int] = None,
         display_height: Optional[int] = None,
         verbose: bool = False,
+        verbosity: VerbosityLevel = "default",
     ):
         """Initialize the Computer Use client.
         
@@ -81,15 +84,21 @@ class ComputerUseClient:
             display_num: Display number (1-based, usually 1)
             display_width: Override display width (auto-detected if None)
             display_height: Override display height (auto-detected if None)
-            verbose: Enable verbose logging with timing information
+            verbose: Enable verbose logging with timing information (deprecated, use verbosity)
+            verbosity: Verbosity level (silent, minimal, default, verbose)
         """
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not found in environment")
         
+        # Handle deprecated verbose parameter
+        if verbose and verbosity == "default":
+            verbosity = "verbose"
+        
         self.client = OpenAI(api_key=self.api_key)
         self.display_num = display_num
-        self.verbose = verbose
+        self.verbosity = verbosity
+        self.verbose = verbosity == "verbose"
         
         # Get display dimensions
         if display_width and display_height:

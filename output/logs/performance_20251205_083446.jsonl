@@ -1,0 +1,4 @@
+{"type": "header", "timestamp": "2025-12-05T08:34:46.071747", "version": "1.0", "format": "jsonl"}
+{"timestamp": "2025-12-05T08:34:46.072630", "action_type": "switch_desktop", "duration_ms": 955.28, "success": true, "context": {"args": "('Notion',)"}}
+{"timestamp": "2025-12-05T08:34:47.068636", "action_type": "screenshot", "duration_ms": 154.44, "success": true}
+{"timestamp": "2025-12-05T08:36:46.227179", "action_type": "switch_desktop", "duration_ms": 833.24, "success": true, "context": {"args": "('Cursor',)"}}

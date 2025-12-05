@@ -4,7 +4,10 @@ import logging
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Literal
+
+
+VerbosityLevel = Literal["silent", "minimal", "default", "verbose"]
 
 
 class ExtractionLogger:
@@ -15,7 +18,8 @@ class ExtractionLogger:
         log_dir: str = "output/logs",
         log_to_file: bool = True,
         log_to_console: bool = True,
-        log_level: str = "INFO"
+        log_level: str = "INFO",
+        verbosity: VerbosityLevel = "default"
     ):
         """Initialize the extraction logger.
         
@@ -24,9 +28,11 @@ class ExtractionLogger:
             log_to_file: Whether to log to file
             log_to_console: Whether to log to console
             log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
+            verbosity: Verbosity level (silent, minimal, default, verbose)
         """
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.verbosity = verbosity
         
         # Create logger
         self.logger = logging.getLogger("notion_extractor")
@@ -35,53 +41,97 @@ class ExtractionLogger:
         # Remove existing handlers
         self.logger.handlers.clear()
         
-        # Create formatters
-        detailed_formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)-8s | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
+        # Create formatters based on verbosity
+        if verbosity == "minimal":
+            # Minimal: timestamp only
+            console_formatter = logging.Formatter(
+                '%(asctime)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+        elif verbosity == "silent":
+            # Silent: no console output
+            console_formatter = None
+        else:
+            # Default and verbose: different detail levels
+            detailed_formatter = logging.Formatter(
+                '%(asctime)s | %(levelname)-8s | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            
+            simple_formatter = logging.Formatter(
+                '%(levelname)-8s | %(message)s'
+            )
+            console_formatter = detailed_formatter if verbosity == "verbose" else simple_formatter
         
-        simple_formatter = logging.Formatter(
-            '%(levelname)-8s | %(message)s'
-        )
-        
-        # File handler
+        # File handler (always detailed when enabled)
         if log_to_file:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             log_file = self.log_dir / f"extraction_{timestamp}.log"
             file_handler = logging.FileHandler(log_file, encoding='utf-8')
             file_handler.setLevel(logging.DEBUG)
-            file_handler.setFormatter(detailed_formatter)
+            file_formatter = logging.Formatter(
+                '%(asctime)s | %(levelname)-8s | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            file_handler.setFormatter(file_formatter)
             self.logger.addHandler(file_handler)
         
         # Console handler
-        if log_to_console:
+        if log_to_console and verbosity != "silent" and console_formatter:
             console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setLevel(logging.INFO)
-            console_handler.setFormatter(simple_formatter)
+            if verbosity == "minimal":
+                console_handler.setLevel(logging.CRITICAL + 1)  # Effectively disabled for normal logs
+            elif verbosity == "verbose":
+                console_handler.setLevel(logging.DEBUG)
+            else:
+                console_handler.setLevel(logging.INFO)
+            console_handler.setFormatter(console_formatter)
             self.logger.addHandler(console_handler)
         
         self.session_start = datetime.now()
         self.events = []
+    
+    def should_log(self, level: str = "info") -> bool:
+        """Check if should log based on verbosity level.
+        
+        Args:
+            level: Log level (info, debug, warning, error)
+            
+        Returns:
+            True if should log
+        """
+        if self.verbosity == "silent":
+            return level in ["error", "warning"]
+        elif self.verbosity == "minimal":
+            return False  # Only timestamps in minimal
+        return True
 
     def info(self, message: str):
         """Log an info message."""
-        self.logger.info(message)
+        if self.should_log("info"):
+            self.logger.info(message)
         self.events.append({"level": "INFO", "message": message, "time": datetime.now()})
+        
+        # In minimal mode, just print timestamp
+        if self.verbosity == "minimal":
+            print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
     def debug(self, message: str):
         """Log a debug message."""
-        self.logger.debug(message)
+        if self.should_log("debug"):
+            self.logger.debug(message)
         self.events.append({"level": "DEBUG", "message": message, "time": datetime.now()})
 
     def warning(self, message: str):
         """Log a warning message."""
-        self.logger.warning(message)
+        if self.should_log("warning"):
+            self.logger.warning(message)
         self.events.append({"level": "WARNING", "message": message, "time": datetime.now()})
 
     def error(self, message: str):
         """Log an error message."""
-        self.logger.error(message)
+        if self.should_log("error"):
+            self.logger.error(message)
         self.events.append({"level": "ERROR", "message": message, "time": datetime.now()})
 
     def log_navigation(self, action: str, target: str, success: bool):
@@ -224,22 +274,29 @@ class ExtractionLogger:
 # Convenience function to create a default logger
 def create_logger(
     output_dir: str = "output/logs",
-    verbose: bool = False
+    verbose: bool = False,
+    verbosity: VerbosityLevel = "default"
 ) -> ExtractionLogger:
     """Create a default extraction logger.
     
     Args:
         output_dir: Directory for log files
-        verbose: If True, set log level to DEBUG
+        verbose: If True, set log level to DEBUG (deprecated, use verbosity)
+        verbosity: Verbosity level (silent, minimal, default, verbose)
         
     Returns:
         ExtractionLogger instance
     """
-    log_level = "DEBUG" if verbose else "INFO"
+    # Handle deprecated verbose parameter
+    if verbose and verbosity == "default":
+        verbosity = "verbose"
+    
+    log_level = "DEBUG" if verbosity == "verbose" else "INFO"
     return ExtractionLogger(
         log_dir=output_dir,
         log_to_file=True,
         log_to_console=True,
-        log_level=log_level
+        log_level=log_level,
+        verbosity=verbosity
     )
 

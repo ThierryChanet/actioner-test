@@ -117,14 +117,17 @@ python -m src.agent "summarize the roadmap page"
 ### With Options
 
 ```bash
-# Use Anthropic Claude
-python -m src.agent --provider anthropic "extract recipes"
-
 # Use specific model
 python -m src.agent --model gpt-4 "analyze my pages"
 
-# Verbose mode (see tool calls)
+# Verbose mode (see detailed output)
 python -m src.agent --verbose "extract database"
+
+# Minimal mode (timestamps only)
+python -m src.agent --verbosity=minimal "extract database"
+
+# Silent mode (errors only)
+python -m src.agent --verbosity=silent "extract database"
 
 # Custom output directory
 python -m src.agent --output-dir results "extract pages"
@@ -140,11 +143,17 @@ python -m src.agent [OPTIONS] [QUERY]
 
 **Options:**
 - `-i, --interactive`: Start interactive mode
-- `-p, --provider`: LLM provider (`openai` or `anthropic`)
 - `-m, --model`: Specific model to use
 - `--notion-token`: Notion API token
 - `-o, --output-dir`: Output directory
-- `-v, --verbose`: Enable verbose logging
+- `-v, --verbose`: Enable verbose logging (same as `--verbosity=verbose`)
+- `--verbosity`: Verbosity level: `silent`, `minimal`, `default`, `verbose`
+  - `silent`: Only errors and warnings
+  - `minimal`: Only timestamps
+  - `default`: Normal output
+  - `verbose`: Detailed output with all tool calls
+- `--no-computer-use`: Disable Computer Use (screen control)
+- `-d, --display`: Display number for Computer Use (default: 1)
 
 ### Subcommands
 

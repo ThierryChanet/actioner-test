@@ -360,21 +360,32 @@ class NotionNavigator:
             "loading": self.detector.is_loading(),
         }
     
-    def get_database_rows(self) -> List[Dict[str, any]]:
+    def get_database_rows(self, debug: bool = False) -> List[Dict[str, any]]:
         """Get clickable rows from the current database view.
+        
+        Args:
+            debug: Enable debug output
         
         Returns:
             List of dicts with row info (title, element)
         """
         content_area = self.detector.get_content_area()
         if not content_area:
+            if debug:
+                print("  [DEBUG] No content area found")
             return []
+        
+        if debug:
+            print(f"  [DEBUG] Content area found: {content_area.role}")
         
         rows = []
         
         # Look for table rows first
         from ..ax.utils import find_elements_by_role
         row_elements = find_elements_by_role(content_area, "AXRow", max_depth=20)
+        
+        if debug:
+            print(f"  [DEBUG] Found {len(row_elements)} AXRow elements")
         
         for row in row_elements:
             # Try to get row title/name
@@ -395,17 +406,25 @@ class NotionNavigator:
                     # Use first link in row
                     row_element = links[0]
                     title = links[0].title or links[0].get_text_content() or title
+                    if debug:
+                        print(f"  [DEBUG] Found link in row: {title[:40]}")
                 else:
                     # Try buttons within row
                     buttons = find_elements_by_role(row, "AXButton", max_depth=3)
                     if buttons:
                         row_element = buttons[0]
                         title = buttons[0].title or buttons[0].get_text_content() or title
+                        if debug:
+                            print(f"  [DEBUG] Found button in row: {title[:40]}")
                     else:
                         # Row not clickable, skip it
+                        if debug:
+                            print(f"  [DEBUG] Skipping non-clickable row: {title[:40]}")
                         continue
             else:
                 row_element = row
+                if debug:
+                    print(f"  [DEBUG] Found clickable row: {title[:40]}")
             
             rows.append({
                 "title": title.strip(),
@@ -414,14 +433,53 @@ class NotionNavigator:
         
         # If no rows found with AXRow role, try looking for links in content
         if not rows:
+            if debug:
+                print("  [DEBUG] No rows found, trying fallback to links...")
             links = find_elements_by_role(content_area, "AXLink", max_depth=15)
+            if debug:
+                print(f"  [DEBUG] Found {len(links)} links in content area")
+            
             for link in links:
                 title = link.title or link.get_text_content()
                 if title and len(title.strip()) > 0:
-                    rows.append({
-                        "title": title.strip(),
-                        "element": link,
-                    })
+                    # Filter out common navigation links
+                    title_lower = title.lower().strip()
+                    if title_lower not in ["home", "sidebar", "back", "forward", "settings"]:
+                        rows.append({
+                            "title": title.strip(),
+                            "element": link,
+                        })
+                        if debug:
+                            print(f"  [DEBUG] Added link as row: {title[:40]}")
+        
+        # Try groups with StaticText if still no rows (for board/gallery views)
+        if not rows:
+            if debug:
+                print("  [DEBUG] Trying groups with static text (board/gallery views)...")
+            groups = find_elements_by_role(content_area, "AXGroup", max_depth=10)
+            if debug:
+                print(f"  [DEBUG] Found {len(groups)} groups")
+            
+            for group in groups:
+                # Look for clickable elements in the group
+                links_in_group = find_elements_by_role(group, "AXLink", max_depth=5)
+                buttons_in_group = find_elements_by_role(group, "AXButton", max_depth=5)
+                
+                clickable = links_in_group + buttons_in_group
+                if clickable:
+                    # Use first clickable element
+                    element = clickable[0]
+                    title = element.title or element.get_text_content()
+                    if title and len(title.strip()) > 3:  # Minimum length
+                        rows.append({
+                            "title": title.strip(),
+                            "element": element,
+                        })
+                        if debug:
+                            print(f"  [DEBUG] Added group element: {title[:40]}")
+        
+        if debug:
+            print(f"  [DEBUG] Total rows found: {len(rows)}")
         
         return rows
     

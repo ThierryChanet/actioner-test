@@ -21,6 +21,8 @@ ActionType = Literal[
     "switch_desktop"
 ]
 
+VerbosityLevel = Literal["silent", "minimal", "default", "verbose"]
+
 
 @dataclass
 class ToolResult:
@@ -42,6 +44,7 @@ class ResponsesAPIClient:
         display_height: int = 1080,
         display_num: int = 1,
         verbose: bool = False,
+        verbosity: VerbosityLevel = "default",
     ):
         """Initialize the Responses API client.
         
@@ -52,18 +55,24 @@ class ResponsesAPIClient:
             display_width: Display width in pixels
             display_height: Display height in pixels
             display_num: Display number (1-based)
-            verbose: Enable verbose logging
+            verbose: Enable verbose logging (deprecated, use verbosity)
+            verbosity: Verbosity level (silent, minimal, default, verbose)
         """
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not found in environment")
+        
+        # Handle deprecated verbose parameter
+        if verbose and verbosity == "default":
+            verbosity = "verbose"
         
         self.model = model
         self.use_native_computer_use = use_native_computer_use
         self.display_width = display_width
         self.display_height = display_height
         self.display_num = display_num
-        self.verbose = verbose
+        self.verbosity = verbosity
+        self.verbose = verbosity == "verbose"
         
         # Initialize OpenAI clients
         self.client = OpenAI(api_key=self.api_key)
@@ -128,6 +137,7 @@ class ResponsesAPIClient:
                 display_width=self.display_width,
                 display_height=self.display_height,
                 verbose=self.verbose,
+                verbosity=self.verbosity,
             )
             if self.verbose:
                 print("✓ Custom macOS Computer Use client initialized")

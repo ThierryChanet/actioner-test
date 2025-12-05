@@ -65,6 +65,10 @@ class NotionOrchestrator:
         self._api_client = None
         self._db_extractor = None
         
+        # Vision extractor (lazy init for fallback)
+        self._vision_extractor = None
+        self._responses_client = None
+        
     @property
     def ax_client(self) -> AXClient:
         """Get or create AX client."""
@@ -340,10 +344,22 @@ class NotionOrchestrator:
         
         # Otherwise, use AX-based navigation through current view
         if not self.ensure_notion_active():
+            self.logger.error("Could not activate Notion app")
             return []
         
         try:
             self.logger.info("Using AX navigation to extract database")
+            
+            # First, check if we can find any rows
+            rows = self.navigator.get_database_rows(debug=self.verbose)
+            if not rows:
+                self.logger.warning("No database rows found via AX")
+                # AUTO-FALLBACK to vision-based extraction
+                self.logger.info("Attempting automatic fallback to vision-based extraction...")
+                return self._extract_database_with_vision(limit=limit)
+            
+            self.logger.info(f"Found {len(rows)} rows in database view")
+            
             results = self.db_extractor.extract_database_pages(
                 limit=limit,
                 use_ocr=use_ocr,
@@ -353,8 +369,13 @@ class NotionOrchestrator:
             return results
             
         except Exception as e:
-            self.logger.error(f"Database extraction failed: {e}")
-            return []
+            self.logger.error(f"AX extraction failed: {e}")
+            if self.verbose:
+                import traceback
+                traceback.print_exc()
+            # Try vision fallback on error
+            self.logger.info("Attempting vision-based extraction as fallback...")
+            return self._extract_database_with_vision(limit=limit)
     
     def search_pages(self, query: str) -> List[Dict[str, str]]:
         """Search for pages matching a query.
@@ -374,6 +395,64 @@ class NotionOrchestrator:
         ]
         
         return matching
+    
+    def _extract_database_with_vision(self, limit: int = 10) -> List[ExtractionResult]:
+        """Extract database using vision-based detection (fallback).
+        
+        Uses gpt-4o vision to identify database rows and click on them.
+        
+        Args:
+            limit: Maximum number of pages to extract
+            
+        Returns:
+            List of ExtractionResult objects
+        """
+        self.logger.info("🔍 Attempting vision-based database extraction...")
+        
+        # Initialize vision extractor if needed
+        if not self._vision_extractor:
+            try:
+                from .agent.responses_client import ResponsesAPIClient
+                from .notion.vision_database_extractor import VisionDatabaseExtractor
+                
+                # Create responses client for screenshots and mouse control
+                self._responses_client = ResponsesAPIClient(
+                    display_width=1920,
+                    display_height=1080,
+                    verbose=self.verbose
+                )
+                
+                # Create vision extractor
+                self._vision_extractor = VisionDatabaseExtractor(
+                    responses_client=self._responses_client,
+                    detector=self.detector,
+                    extractor=self.extractor,
+                    logger=self.logger
+                )
+                
+                self.logger.info("✓ Vision extractor initialized")
+                
+            except Exception as e:
+                self.logger.error(f"Cannot initialize vision extractor: {e}")
+                if self.verbose:
+                    import traceback
+                    traceback.print_exc()
+                return []
+        
+        # Extract using vision
+        try:
+            results = self._vision_extractor.extract_database_pages(limit=limit)
+            if results:
+                self.logger.info(f"✓ Extracted {len(results)} pages via vision")
+            else:
+                self.logger.warning("Vision extraction found no results")
+            return results
+        except Exception as e:
+            self.logger.error(f"Vision extraction failed: {e}")
+            if self.verbose:
+                import traceback
+                traceback.print_exc()
+            return []
     
     def analyze_content(self, result: ExtractionResult) -> Dict[str, Any]:
         """Analyze extracted content.

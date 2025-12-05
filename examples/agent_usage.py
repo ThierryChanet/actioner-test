@@ -27,7 +27,7 @@ def example_one_shot_query():
     
     # Create agent (uses OpenAI)
     agent = create_agent(
-        verbose=False
+        verbosity="default"  # Options: silent, minimal, default, verbose
     )
     
     # Ask a question
@@ -115,7 +115,7 @@ def example_custom_config():
         model="gpt-4",
         notion_token=os.environ.get('NOTION_TOKEN'),
         output_dir="custom_output",
-        verbose=True
+        verbosity="verbose"  # Options: silent, minimal, default, verbose
     )
     
     response = agent.run("Extract recipes")
@@ -135,7 +135,7 @@ def example_computer_use():
     
     agent = create_agent(
         computer_use=True,
-        verbose=True
+        verbosity="verbose"
     )
     
     # Agent will use mouse/keyboard to navigate
@@ -155,7 +155,7 @@ def example_computer_use_navigation():
     
     agent = create_agent(
         computer_use=True,
-        verbose=True
+        verbosity="verbose"
     )
     
     # Agent will click and navigate using the screen
@@ -177,7 +177,7 @@ def example_computer_use_with_extraction():
     
     agent = create_agent(
         computer_use=True,
-        verbose=True
+        verbosity="verbose"
     )
     
     # Combines navigation and extraction
@@ -185,6 +185,40 @@ def example_computer_use_with_extraction():
         "Find and click on the Roadmap page, then extract its content"
     )
     print(f"Agent: {response}\n")
+
+
+def example_minimal_verbosity():
+    """Example: Minimal verbosity (timestamps only)."""
+    print("\n" + "="*70)
+    print("EXAMPLE 10: Minimal Verbosity Mode")
+    print("="*70 + "\n")
+    
+    # Create agent with minimal output
+    agent = create_agent(
+        verbosity="minimal"  # Only shows timestamps
+    )
+    
+    # Run a query - only timestamps will be printed
+    print("Running with minimal verbosity (timestamps only):")
+    response = agent.run("List all pages")
+    print(f"\nAgent: {response}\n")
+
+
+def example_silent_mode():
+    """Example: Silent mode (errors only)."""
+    print("\n" + "="*70)
+    print("EXAMPLE 11: Silent Mode")
+    print("="*70 + "\n")
+    
+    # Create agent with silent output
+    agent = create_agent(
+        verbosity="silent"  # Only errors and warnings
+    )
+    
+    # Run a query - no output except errors
+    print("Running in silent mode (errors only):")
+    response = agent.run("List all pages")
+    print(f"\nAgent: {response}\n")
 
 
 def main():
@@ -216,6 +250,10 @@ def main():
         # example_computer_use()
         # example_computer_use_navigation()
         # example_computer_use_with_extraction()
+        
+        # Verbosity examples:
+        # example_minimal_verbosity()
+        # example_silent_mode()
         
     except Exception as e:
         print(f"\n❌ Error: {e}")

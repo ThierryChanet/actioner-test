@@ -261,12 +261,18 @@ python -m src.cli list-pages
 
 ### Global Options
 
-- `--verbose` - Enable verbose debug logging
+- `--verbose` - Enable verbose debug logging (deprecated, use `--verbosity=verbose`)
+- `--verbosity LEVEL` - Set verbosity level: `silent`, `minimal`, `default`, `verbose`
+  - `silent`: Only errors and warnings
+  - `minimal`: Only timestamps
+  - `default`: Normal output
+  - `verbose`: Detailed debug output
 - `--output-dir PATH` - Set output directory (default: `output`)
 
 **Example:**
 ```bash
-python -m src.cli --verbose --output-dir results extract "My Page"
+python -m src.cli --verbosity=verbose --output-dir results extract "My Page"
+python -m src.cli --verbosity=minimal extract "My Page"  # Timestamps only
 ```
 
 ## Output

@@ -24,7 +24,11 @@ from .core import create_agent
               default='output',
               help='Output directory (default: output)')
 @click.option('--verbose', '-v', is_flag=True,
-              help='Enable verbose logging')
+              help='Enable verbose logging (same as --verbosity=verbose)')
+@click.option('--verbosity',
+              type=click.Choice(['silent', 'minimal', 'default', 'verbose'], case_sensitive=False),
+              default='default',
+              help='Verbosity level: silent (errors only), minimal (timestamps only), default, verbose')
 @click.option('--no-computer-use', is_flag=True,
               help='Disable Computer Use API (Computer Use is enabled by default)')
 @click.option('--display', '-d',
@@ -32,7 +36,7 @@ from .core import create_agent
               default=1,
               help='Display number for Computer Use (default: 1)')
 @click.pass_context
-def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, 
+def cli(ctx, query, interactive, model, notion_token, output_dir, verbose, verbosity,
         no_computer_use, display):
     """Notion Agent - Intelligent extraction assistant (powered by OpenAI).
     
@@ -45,6 +49,12 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose,
         
         # Interactive mode
         python -m src.agent --interactive
+        
+        # Minimal output (timestamps only)
+        python -m src.agent --verbosity=minimal "extract recipes"
+        
+        # Silent mode (errors only)
+        python -m src.agent --verbosity=silent "extract recipes"
         
         # Disable Computer Use (use standard AX navigation)
         python -m src.agent --no-computer-use "navigate to recipes"
@@ -64,8 +74,12 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose,
     # Computer Use is enabled by default
     computer_use = not no_computer_use
     
-    # Show Computer Use status in verbose mode
+    # Handle --verbose flag (overrides verbosity)
     if verbose:
+        verbosity = 'verbose'
+    
+    # Show Computer Use status in verbose mode only
+    if verbosity == 'verbose':
         if computer_use:
             click.echo(f"🖥️  Computer Use enabled (display {display})")
         else:
@@ -77,7 +91,7 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose,
             model=model,
             notion_token=notion_token,
             output_dir=output_dir,
-            verbose=verbose,
+            verbosity=verbosity,
             computer_use=computer_use,
             display_num=display,
         )
@@ -117,7 +131,12 @@ def cli(ctx, query, interactive, model, notion_token, output_dir, verbose,
               help='Specific OpenAI model to use')
 @click.option('--notion-token', envvar='NOTION_TOKEN')
 @click.option('--output-dir', '-o', default='output')
-@click.option('--verbose', '-v', is_flag=True)
+@click.option('--verbose', '-v', is_flag=True,
+              help='Enable verbose logging (same as --verbosity=verbose)')
+@click.option('--verbosity',
+              type=click.Choice(['silent', 'minimal', 'default', 'verbose'], case_sensitive=False),
+              default='default',
+              help='Verbosity level')
 @click.option('--no-computer-use', is_flag=True,
               help='Disable Computer Use API (Computer Use is enabled by default)')
 @click.option('--display', '-d', type=int, default=1,

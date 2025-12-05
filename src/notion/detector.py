@@ -266,8 +266,11 @@ class NotionDetector:
         
         return None
 
-    def get_content_area(self) -> Optional[AXElement]:
+    def get_content_area(self, debug: bool = False) -> Optional[AXElement]:
         """Get the main content area of the Notion page.
+        
+        Args:
+            debug: Enable debug output
         
         Returns:
             Content area element or None if not found
@@ -275,22 +278,52 @@ class NotionDetector:
         if not self.main_window:
             return None
         
-        # Look for the scroll area that contains the content
-        from ..ax.utils import find_scroll_area
-        
+        # Look for scroll area first
+        from ..ax.utils import find_scroll_area, find_elements_by_role
         scroll_area = find_scroll_area(self.main_window, max_depth=15)
-        if scroll_area:
-            return scroll_area
         
-        # Fallback: look for web area (Notion uses Electron)
-        from ..ax.utils import find_elements_by_role
-        
+        # Find ALL web areas (Notion is Electron-based)
         web_areas = find_elements_by_role(self.main_window, "AXWebArea", max_depth=10)
-        if web_areas:
-            return web_areas[0]
         
-        # Last resort: return the main window itself
-        return self.main_window
+        if debug:
+            print(f"  [DEBUG] Found {len(web_areas)} AXWebArea elements")
+        
+        # Filter and rank web areas by size (page content is usually largest)
+        ranked_areas = []
+        for area in web_areas:
+            size = area.size
+            pos = area.position
+            title = area.title or ""
+            
+            if size and pos:
+                area_size = size[0] * size[1]
+                # Skip small areas (likely tab bars, sidebars)
+                if area_size < 50000:  # Skip areas smaller than ~200x250
+                    if debug:
+                        print(f"  [DEBUG] Skipping small area '{title}' ({area_size} pixels)")
+                    continue
+                
+                ranked_areas.append({
+                    'element': area,
+                    'size': area_size,
+                    'title': title,
+                    'position': pos
+                })
+        
+        # Sort by size (largest first)
+        ranked_areas.sort(key=lambda x: x['size'], reverse=True)
+        
+        if debug and ranked_areas:
+            print(f"  [DEBUG] Largest web area: '{ranked_areas[0]['title']}' ({ranked_areas[0]['size']} pixels)")
+        
+        # Return largest web area (likely the content)
+        if ranked_areas:
+            return ranked_areas[0]['element']
+        
+        # Fallback to scroll area or main window
+        if debug:
+            print(f"  [DEBUG] No suitable web areas, using fallback")
+        return scroll_area or self.main_window
 
     def get_sidebar(self) -> Optional[AXElement]:
         """Get the sidebar element.

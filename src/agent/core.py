@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 
 from dotenv import load_dotenv
 from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
@@ -21,6 +21,9 @@ from .callbacks import UserInputCallback, ProgressCallback
 from .computer_use_client import ComputerUseClient
 from .computer_use_tools import get_computer_use_tools
 from .responses_client import ResponsesAPIClient
+
+
+VerbosityLevel = Literal["silent", "minimal", "default", "verbose"]
 
 
 SYSTEM_PROMPT = """You are a Notion Extraction Expert assistant. You help users extract and analyze content from their Notion workspace using the macOS Notion app.
@@ -207,6 +210,7 @@ class NotionAgent:
         model: Optional[str] = None,
         temperature: float = 0,
         verbose: bool = False,
+        verbosity: VerbosityLevel = "default",
         computer_use: bool = True,
         display_num: int = 1,
     ):
@@ -217,11 +221,17 @@ class NotionAgent:
             output_dir: Directory for output files
             model: Specific model to use (auto-selects if None)
             temperature: LLM temperature (0 = deterministic)
-            verbose: Enable verbose logging
+            verbose: Enable verbose logging (deprecated, use verbosity)
+            verbosity: Verbosity level (silent, minimal, default, verbose)
             computer_use: Enable Computer Use API for screen control (default: True)
             display_num: Display number for Computer Use (1-based)
         """
-        self.verbose = verbose
+        # Handle deprecated verbose parameter
+        if verbose and verbosity == "default":
+            verbosity = "verbose"
+        
+        self.verbosity = verbosity
+        self.verbose = verbosity == "verbose"  # For backward compatibility
         self.output_dir = output_dir
         self.computer_use = computer_use
         
@@ -229,7 +239,7 @@ class NotionAgent:
         self.orchestrator = NotionOrchestrator(
             notion_token=notion_token,
             output_dir=output_dir,
-            verbose=verbose
+            verbose=self.verbose
         )
         
         # Initialize state
@@ -246,17 +256,18 @@ class NotionAgent:
                     display_width=1920,  # TODO: Make configurable
                     display_height=1080,
                     use_native_computer_use=True,
-                    verbose=verbose
+                    verbose=self.verbose,
+                    verbosity=self.verbosity
                 )
                 # Keep reference to underlying custom client if used
                 self.computer_client = self.responses_client.custom_client
-                if verbose:
+                if self.verbose:
                     if self.responses_client.native_computer_use_available:
                         print("✅ Using OpenAI native Computer Use (Responses API)")
                     else:
                         print("✅ Using custom macOS Computer Use implementation")
             except Exception as e:
-                if verbose:
+                if self.verbose:
                     print(f"Warning: Computer Use initialization failed: {e}")
                     print("Falling back to standard tools")
                 self.computer_use = False
@@ -503,6 +514,7 @@ def create_agent(
     notion_token: Optional[str] = None,
     output_dir: str = "output",
     verbose: bool = False,
+    verbosity: VerbosityLevel = "default",
     computer_use: bool = True,
     display_num: int = 1,
 ) -> NotionAgent:
@@ -512,7 +524,8 @@ def create_agent(
         model: Specific model name or None for default (uses OpenAI)
         notion_token: Optional Notion API token
         output_dir: Output directory
-        verbose: Enable verbose logging
+        verbose: Enable verbose logging (deprecated, use verbosity)
+        verbosity: Verbosity level (silent, minimal, default, verbose)
         computer_use: Enable Computer Use API for screen control (default: True)
         display_num: Display number for Computer Use (1-based)
         
@@ -524,6 +537,7 @@ def create_agent(
         output_dir=output_dir,
         model=model,
         verbose=verbose,
+        verbosity=verbosity,
         computer_use=computer_use,
         display_num=display_num,
     )
