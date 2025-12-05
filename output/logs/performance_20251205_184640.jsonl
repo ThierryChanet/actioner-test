@@ -1,0 +1,8 @@
+{"type": "header", "timestamp": "2025-12-05T18:46:40.606562", "version": "1.0", "format": "jsonl"}
+{"timestamp": "2025-12-05T18:46:40.606787", "action_type": "screenshot", "duration_ms": 151.18, "success": true}
+{"timestamp": "2025-12-05T18:47:00.628464", "action_type": "switch_desktop", "duration_ms": 922.31, "success": true, "context": {"args": "('Notion',)"}}
+{"timestamp": "2025-12-05T18:47:01.470707", "action_type": "screenshot", "duration_ms": 112.31, "success": true}
+{"timestamp": "2025-12-05T18:47:16.924833", "action_type": "execute_action", "duration_ms": 22.63, "success": true}
+{"timestamp": "2025-12-05T18:47:17.661018", "action_type": "execute_action", "duration_ms": 33.43, "success": true}
+{"timestamp": "2025-12-05T18:47:18.439215", "action_type": "screenshot", "duration_ms": 96.05, "success": true}
+{"timestamp": "2025-12-05T18:47:34.003493", "action_type": "switch_desktop", "duration_ms": 849.43, "success": true, "context": {"args": "('iTerm2',)"}}

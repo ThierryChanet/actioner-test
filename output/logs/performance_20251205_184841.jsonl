@@ -1,0 +1,3 @@
+{"type": "header", "timestamp": "2025-12-05T18:48:41.527325", "version": "1.0", "format": "jsonl"}
+{"timestamp": "2025-12-05T18:48:41.527575", "action_type": "screenshot", "duration_ms": 150.33, "success": true}
+{"timestamp": "2025-12-05T18:48:59.780299", "action_type": "switch_desktop", "duration_ms": 917.68, "success": true, "context": {"args": "('iTerm2',)"}}

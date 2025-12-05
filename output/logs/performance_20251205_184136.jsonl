@@ -1,0 +1,5 @@
+{"type": "header", "timestamp": "2025-12-05T18:41:36.523317", "version": "1.0", "format": "jsonl"}
+{"timestamp": "2025-12-05T18:41:36.523527", "action_type": "screenshot", "duration_ms": 154.55, "success": true}
+{"timestamp": "2025-12-05T18:41:57.064862", "action_type": "switch_desktop", "duration_ms": 952.55, "success": true, "context": {"args": "('Notion',)"}}
+{"timestamp": "2025-12-05T18:41:57.906719", "action_type": "screenshot", "duration_ms": 90.59, "success": true}
+{"timestamp": "2025-12-05T18:42:13.231732", "action_type": "switch_desktop", "duration_ms": 848.05, "success": true, "context": {"args": "('iTerm2',)"}}
