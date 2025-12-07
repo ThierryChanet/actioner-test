@@ -306,7 +306,15 @@ class NotionAgent:
         # Initialize tools (computer use or standard)
         if self.computer_use and self.anthropic_client:
             # Computer use tools + extraction tools
-            from .tools import ExtractPageContentTool, ExtractDatabaseTool, GetCurrentContextTool, AskUserTool
+            from .tools import (
+                ExtractPageContentTool,
+                ExtractDatabaseTool,
+                GetCurrentContextTool,
+                AskUserTool,
+                SaveExtractionTool,
+                RetrieveSavedExtractionTool,
+                WipeSavedExtractionTool,
+            )
 
             # Use Anthropic client for computer tools
             computer_tools = get_computer_use_tools(self.anthropic_client, self.state)
@@ -316,6 +324,9 @@ class NotionAgent:
                 ExtractDatabaseTool(orchestrator=self.orchestrator, state=self.state),
                 GetCurrentContextTool(orchestrator=self.orchestrator, state=self.state),
                 AskUserTool(orchestrator=self.orchestrator, state=self.state),
+                SaveExtractionTool(orchestrator=self.orchestrator, state=self.state),
+                RetrieveSavedExtractionTool(orchestrator=self.orchestrator, state=self.state),
+                WipeSavedExtractionTool(orchestrator=self.orchestrator, state=self.state),
             ]
 
             # Conditionally add Notion-specific tools (only with vision-enabled provider)
@@ -490,13 +501,24 @@ class NotionAgent:
         self.state = AgentState()
         # Reinitialize tools with new state
         if self.computer_use and self.anthropic_client:
-            from .tools import ExtractPageContentTool, ExtractDatabaseTool, GetCurrentContextTool, AskUserTool
+            from .tools import (
+                ExtractPageContentTool,
+                ExtractDatabaseTool,
+                GetCurrentContextTool,
+                AskUserTool,
+                SaveExtractionTool,
+                RetrieveSavedExtractionTool,
+                WipeSavedExtractionTool,
+            )
             computer_tools = get_computer_use_tools(self.anthropic_client, self.state)
             extraction_tools = [
                 ExtractPageContentTool(orchestrator=self.orchestrator, state=self.state),
                 ExtractDatabaseTool(orchestrator=self.orchestrator, state=self.state),
                 GetCurrentContextTool(orchestrator=self.orchestrator, state=self.state),
                 AskUserTool(orchestrator=self.orchestrator, state=self.state),
+                SaveExtractionTool(orchestrator=self.orchestrator, state=self.state),
+                RetrieveSavedExtractionTool(orchestrator=self.orchestrator, state=self.state),
+                WipeSavedExtractionTool(orchestrator=self.orchestrator, state=self.state),
             ]
 
             # Conditionally add Notion-specific tools (only with vision-enabled provider)

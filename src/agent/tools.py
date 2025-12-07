@@ -1,6 +1,9 @@
 """LangChain tools for Notion extraction operations."""
 
 import json
+import time
+from datetime import datetime
+from pathlib import Path
 from typing import Optional, Type, List
 from pydantic import BaseModel, Field
 from langchain.tools import BaseTool
@@ -8,6 +11,9 @@ from langchain.tools import BaseTool
 from ..orchestrator import NotionOrchestrator
 from .state import AgentState
 from .callbacks import ask_user_input, ask_yes_no, show_progress
+
+
+SAVE_DIR_NAME = "saved_extractions"
 
 
 class NavigateToPageInput(BaseModel):
@@ -325,6 +331,182 @@ class AskUserTool(BaseTool):
         return response
 
 
+class SaveExtractionInput(BaseModel):
+    """Input for save_extraction_result tool."""
+    title: str = Field(description="Title to store with the extraction (used for filename)")
+    content: str = Field(description="Extraction content to store (JSON or text)")
+
+
+class SaveExtractionTool(BaseTool):
+    """Tool for saving an extraction result to disk."""
+
+    name: str = "save_extraction_result"
+    description: str = (
+        "Persist an extraction result to the saved_extractions folder under the agent output directory. "
+        "Provide a title and the extraction content (JSON or text). "
+        "Returns the saved file path."
+    )
+    args_schema: Type[BaseModel] = SaveExtractionInput
+
+    orchestrator: NotionOrchestrator = Field(exclude=True)
+    state: AgentState = Field(exclude=True)
+
+    def _slugify(self, text: str) -> str:
+        """Create a filesystem-safe slug."""
+        cleaned = "".join(ch.lower() if ch.isalnum() else "-" for ch in text).strip("-")
+        return cleaned or "untitled"
+
+    def _run(self, title: str, content: str) -> str:
+        """Save extraction to a dedicated folder."""
+        base_dir = Path(self.orchestrator.output_dir) / SAVE_DIR_NAME
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        slug = self._slugify(title)
+        timestamp = int(time.time())
+        filename = f"{timestamp}_{slug}.json"
+        path = base_dir / filename
+
+        payload = {
+            "title": title,
+            "saved_at": datetime.utcnow().isoformat() + "Z",
+            "content": content,
+        }
+
+        with path.open("w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+
+        return json.dumps({
+            "status": "success",
+            "saved_path": str(path),
+            "title": title
+        }, indent=2)
+
+
+class RetrieveSavedExtractionInput(BaseModel):
+    """Input for retrieve_saved_extraction tool."""
+    query: Optional[str] = Field(
+        default=None,
+        description="Optional title substring to filter saved extractions (case-insensitive). If omitted, returns most recent."
+    )
+    limit: int = Field(
+        default=3,
+        description="Maximum number of saved extractions to return (most recent first)"
+    )
+
+
+class RetrieveSavedExtractionTool(BaseTool):
+    """Tool for retrieving saved extraction results."""
+
+    name: str = "retrieve_saved_extraction"
+    description: str = (
+        "Retrieve saved extraction results from the saved_extractions folder under the agent output directory. "
+        "Optionally filter by a title substring and control how many to return."
+    )
+    args_schema: Type[BaseModel] = RetrieveSavedExtractionInput
+
+    orchestrator: NotionOrchestrator = Field(exclude=True)
+    state: AgentState = Field(exclude=True)
+
+    def _run(self, query: Optional[str] = None, limit: int = 3) -> str:
+        """Retrieve saved extractions."""
+        base_dir = Path(self.orchestrator.output_dir) / SAVE_DIR_NAME
+        if not base_dir.exists():
+            return json.dumps({
+                "status": "not_found",
+                "message": f"No saved extractions. Folder does not exist at {base_dir}"
+            }, indent=2)
+
+        files = sorted(base_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+        if query:
+            q = query.lower()
+            files = [f for f in files if q in f.name.lower()]
+
+        if not files:
+            return json.dumps({
+                "status": "empty",
+                "message": "No saved extractions match the criteria",
+                "query": query
+            }, indent=2)
+
+        results = []
+        for file_path in files[: max(1, limit)]:
+            try:
+                with file_path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                results.append({
+                    "file": str(file_path),
+                    "title": data.get("title"),
+                    "saved_at": data.get("saved_at"),
+                    "content": data.get("content"),
+                })
+            except Exception as exc:
+                results.append({
+                    "file": str(file_path),
+                    "error": f"Failed to read file: {exc}"
+                })
+
+        return json.dumps({
+            "status": "success",
+            "count": len(results),
+            "results": results
+        }, indent=2)
+
+
+class WipeSavedExtractionInput(BaseModel):
+    """Input for wipe_saved_extractions tool."""
+    confirm: bool = Field(
+        default=False,
+        description="Set to true to confirm wiping all saved extractions."
+    )
+
+
+class WipeSavedExtractionTool(BaseTool):
+    """Tool for wiping the saved extractions folder."""
+
+    name: str = "wipe_saved_extractions"
+    description: str = (
+        "Delete all files inside the saved_extractions folder under the agent output directory. "
+        "Set confirm=true to proceed."
+    )
+    args_schema: Type[BaseModel] = WipeSavedExtractionInput
+
+    orchestrator: NotionOrchestrator = Field(exclude=True)
+    state: AgentState = Field(exclude=True)
+
+    def _run(self, confirm: bool = False) -> str:
+        """Wipe saved extractions."""
+        if not confirm:
+            return json.dumps({
+                "status": "confirmation_required",
+                "message": "Set confirm=true to delete all saved extractions."
+            }, indent=2)
+
+        base_dir = Path(self.orchestrator.output_dir) / SAVE_DIR_NAME
+        if not base_dir.exists():
+            return json.dumps({
+                "status": "not_found",
+                "message": f"No folder to wipe at {base_dir}"
+            }, indent=2)
+
+        deleted = 0
+        for file_path in base_dir.glob("*"):
+            try:
+                file_path.unlink()
+                deleted += 1
+            except Exception as exc:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Failed after deleting {deleted} files. Error on {file_path}: {exc}"
+                }, indent=2)
+
+        return json.dumps({
+            "status": "success",
+            "deleted_files": deleted,
+            "folder": str(base_dir)
+        }, indent=2)
+
+
 def get_notion_tools(
     orchestrator: NotionOrchestrator,
     state: AgentState
@@ -346,5 +528,8 @@ def get_notion_tools(
         SearchPagesTool(orchestrator=orchestrator, state=state),
         GetCurrentContextTool(orchestrator=orchestrator, state=state),
         AskUserTool(orchestrator=orchestrator, state=state),
+        SaveExtractionTool(orchestrator=orchestrator, state=state),
+        RetrieveSavedExtractionTool(orchestrator=orchestrator, state=state),
+        WipeSavedExtractionTool(orchestrator=orchestrator, state=state),
     ]
 
