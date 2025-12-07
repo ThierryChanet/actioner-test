@@ -584,31 +584,53 @@ If you cannot find '{element_text}', respond with: NOT_FOUND"""
             Result dictionary
         """
         try:
+            # Small delay before key presses to ensure the target app has focus
+            # and UI has settled (helps with actions like closing panels in Notion).
+            time.sleep(0.5)
+
             import subprocess
 
-            # Map key names to AppleScript key codes
-            key_map = {
-                "Return": "return",
-                "Enter": "return",
-                "Tab": "tab",
-                "Escape": "escape",
-                "Space": "space",
-                "Delete": "delete",
-                "Backspace": "delete",
+            # Map key names to AppleScript key codes for non-printable keys
+            key_code_map = {
+                "Return": 36,
+                "Enter": 36,
+                "Tab": 48,
+                "Escape": 53,
+                "Esc": 53,
+                "Space": 49,
+                "Delete": 51,
+                "Backspace": 51,
+                "Left": 123,
+                "Right": 124,
+                "Down": 125,
+                "Up": 126,
             }
 
-            apple_key = key_map.get(key, key.lower())
+            script: str
 
-            script = f'''
-            tell application "System Events"
-                key code using {{shift down, command down}}
-            end tell
-            '''
-
-            if apple_key in key_map.values():
+            if key in key_code_map:
+                # Use key code for special keys
+                code = key_code_map[key]
                 script = f'''
                 tell application "System Events"
-                    keystroke {apple_key}
+                    key code {code}
+                end tell
+                '''
+            else:
+                # For single printable characters, use keystroke
+                # Normalize common casing (e.g., "a", "A")
+                if len(key) == 1:
+                    to_type = key
+                else:
+                    # Fallback: use first character
+                    to_type = key[0]
+
+                # Escape characters for AppleScript string
+                escaped = to_type.replace("\\", "\\\\").replace('"', '\\"')
+
+                script = f'''
+                tell application "System Events"
+                    keystroke "{escaped}"
                 end tell
                 '''
 

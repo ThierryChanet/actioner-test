@@ -239,11 +239,12 @@ class NotionClosePageInput(BaseModel):
 class NotionClosePageTool(BaseTool):
     """Tool for closing an open Notion page sidebar.
 
-    This tool finds and clicks the close button (>> chevron) to collapse
-    the sidebar and return to the database view. It uses:
-    1. Vision to find chevron buttons
-    2. OCR fallback if vision fails
-    3. Position-based heuristics as last resort
+    This tool closes the right-hand Notion page panel and returns to the
+    database view by **pressing the Escape key** once Notion is in focus.
+
+    We found through interactive testing that Escape is more reliable than
+    fixed coordinate clicks or heuristics for the close button, and it also
+    better matches the native Notion UX.
 
     Only use this tool when working with Notion.
     """
@@ -261,8 +262,8 @@ class NotionClosePageTool(BaseTool):
     state: AgentState = Field(exclude=True)
 
     def _run(self) -> str:
-        """Close the Notion recipe page by clicking the close button."""
-        show_progress("Attempting to close recipe page...")
+        """Close the Notion page panel by pressing Escape."""
+        show_progress("Attempting to close Notion page with Escape key...")
 
         # Initialize screen manager
         screen_mgr = NotionScreenManager(self.client)
@@ -273,11 +274,9 @@ class NotionClosePageTool(BaseTool):
                 # Step 1: Take before screenshot
                 before_screenshot = self.client.take_screenshot(use_cache=False)
 
-                # Step 2: Click the close button
-                # Coordinates (710, 70) = close button location
-                # (horizontally near middle, right below tabs section)
-                show_progress("Clicking close button...")
-                self.client.execute_action("left_click", coordinate=(710, 70))
+                # Step 2: Press Escape to close the panel
+                show_progress("Pressing Escape to close panel...")
+                self.client.execute_action("key", text="Escape")
                 time.sleep(1.5)
 
                 # Step 3: Take after screenshot to verify
