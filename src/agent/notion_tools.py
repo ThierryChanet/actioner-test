@@ -519,6 +519,160 @@ If not found: NOT_FOUND"""
         return None
 
 
+class NotionVisionExtractInput(BaseModel):
+    """Input for Notion vision extraction tool."""
+    focus_area: Optional[str] = Field(
+        default=None,
+        description="Optional hint about what to focus on (e.g., 'main content', 'properties', 'list items')"
+    )
+
+
+class NotionVisionExtractTool(BaseTool):
+    """Tool for extracting content from an open Notion page using vision.
+
+    This tool captures the current Notion screen and uses Claude vision to
+    extract structured content from the visible page or panel. It works with
+    any type of Notion content - pages, database entries, documents, etc.
+
+    The tool analyzes the right-hand panel (if open) or main content area
+    and extracts:
+    - Page title
+    - Main sections and their content
+    - Lists, properties, and structured data
+    - Full text content
+
+    Use this when standard extraction misses content or when you need to
+    read from an open side panel.
+    """
+
+    name: str = "notion_vision_extract"
+    description: str = (
+        "Extract content from the currently visible Notion page using vision analysis. "
+        "This tool reads whatever is visible on screen - the open page panel, main content, or database entry. "
+        "It captures titles, sections, lists, properties, and all text content. "
+        "Use this when you need to extract from an open side panel or when standard extraction misses content. "
+        "Optionally provide a focus_area hint like 'main content' or 'properties' to emphasize specific parts. "
+        "IMPORTANT: After calling this tool, you MUST display the extracted content to the user - show the lists, sections, and data in your response."
+    )
+    args_schema: Type[BaseModel] = NotionVisionExtractInput
+
+    client: object = Field(exclude=True)
+    state: AgentState = Field(exclude=True)
+
+    def _run(self, focus_area: Optional[str] = None) -> str:
+        """Extract content using Claude vision."""
+        show_progress("Extracting page content with vision...")
+
+        # Initialize screen manager
+        screen_mgr = NotionScreenManager(self.client)
+
+        try:
+            # Use context manager for automatic screen switching
+            with screen_mgr.for_action("vision extraction"):
+                # Take screenshot of current Notion state
+                screenshot_b64 = self.client.take_screenshot(use_cache=False)
+
+                # Build prompt based on focus area
+                focus_hint = ""
+                if focus_area:
+                    focus_hint = f"\nFOCUS: Pay special attention to {focus_area}."
+
+                prompt = f"""Analyze this Notion page screenshot and extract all visible content.
+
+Look at the main content area or right-hand panel (if a page is open in a sidebar).
+Ignore navigation elements, sidebars on the left, and top chrome.
+{focus_hint}
+
+Extract and return a JSON object with:
+{{
+  "page_title": "Title of the page/entry",
+  "sections": {{
+    "Section Name": ["content line 1", "content line 2", ...],
+    "Another Section": ["content..."]
+  }},
+  "properties": {{
+    "Property Name": "value",
+    ...
+  }},
+  "lists": [
+    {{"type": "bullet/numbered", "items": ["item 1", "item 2"]}},
+    ...
+  ],
+  "full_text": "Complete plain text of main content area"
+}}
+
+Guidelines:
+- Preserve the original structure and formatting
+- Group content by visible sections/headings
+- Extract lists, properties, and structured data separately
+- For properties (like tags, dates, metadata), include them in the properties object
+- The full_text should contain everything from the main content, excluding chrome/navigation
+- If you see a list of items (like ingredients or steps), put them in lists array
+
+Return ONLY valid JSON, no markdown formatting."""
+
+                # Call Claude vision
+                response = self.client.client.messages.create(
+                    model=self.client.model,
+                    max_tokens=4000,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/png",
+                                        "data": screenshot_b64
+                                    }
+                                },
+                                {
+                                    "type": "text",
+                                    "text": prompt
+                                }
+                            ]
+                        }
+                    ],
+                    temperature=0
+                )
+
+                # Extract response text
+                response_text = response.content[0].text.strip()
+
+                # Parse JSON (handle markdown code blocks)
+                if "```json" in response_text:
+                    response_text = response_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in response_text:
+                    response_text = response_text.split("```")[1].split("```")[0].strip()
+
+                try:
+                    extracted_data = json.loads(response_text)
+
+                    return json.dumps({
+                        "status": "success",
+                        "extraction_method": "vision",
+                        "focus_area": focus_area,
+                        "data": extracted_data
+                    }, indent=2)
+
+                except json.JSONDecodeError as e:
+                    # Return raw text if JSON parsing fails
+                    return json.dumps({
+                        "status": "partial_success",
+                        "extraction_method": "vision",
+                        "message": "Vision extraction succeeded but JSON parsing failed",
+                        "raw_response": response_text,
+                        "parse_error": str(e)
+                    }, indent=2)
+
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "message": f"Vision extraction failed: {e}"
+            }, indent=2)
+
+
 def get_notion_tools(client: object, state: AgentState) -> list:
     """Get Notion-specific tools.
 
@@ -536,4 +690,5 @@ def get_notion_tools(client: object, state: AgentState) -> list:
     return [
         NotionOpenPageTool(client=client, state=state),
         NotionClosePageTool(client=client, state=state),
+        NotionVisionExtractTool(client=client, state=state),
     ]

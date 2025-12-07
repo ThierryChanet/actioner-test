@@ -20,7 +20,9 @@ class ScreenManager:
     4. Notify user with sound
 
     Usage:
-        manager = ScreenManager(client, terminal_name="iTerm")
+        manager = ScreenManager(client)  # Auto-detects terminal
+        # Or explicitly specify:
+        manager = ScreenManager(client, terminal_name="Cursor")
 
         # Automatic context manager
         with manager.on_screen("Notion"):
@@ -37,7 +39,7 @@ class ScreenManager:
     def __init__(
         self,
         client: Any,
-        terminal_name: str = "iTerm",
+        terminal_name: Optional[str] = None,
         switch_delay: float = 2.0,
         notification_sound: str = "/System/Library/Sounds/Glass.aiff"
     ):
@@ -45,15 +47,57 @@ class ScreenManager:
 
         Args:
             client: Computer use client with execute_action method
-            terminal_name: Name of terminal application to switch back to
+            terminal_name: Name of terminal application to switch back to (auto-detects if None)
             switch_delay: Seconds to wait after switching screens
             notification_sound: Path to notification sound file
         """
         self.client = client
-        self.terminal_name = terminal_name
+        self.terminal_name = terminal_name or self._detect_terminal()
         self.switch_delay = switch_delay
         self.notification_sound = notification_sound
         self._current_screen: Optional[str] = None
+
+    def _detect_terminal(self) -> str:
+        """Auto-detect the current terminal application.
+        
+        Returns:
+            Name of the detected terminal application
+        """
+        try:
+            import subprocess
+            # Use AppleScript to get the frontmost application
+            script = '''
+            tell application "System Events"
+                set frontApp to name of first application process whose frontmost is true
+            end tell
+            return frontApp
+            '''
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            if result.returncode == 0:
+                app_name = result.stdout.strip()
+                lowered = app_name.lower() if app_name else ""
+
+                # Avoid switching back to legacy terminal variants; prefer a generic terminal target
+                if "iterm" in lowered:
+                    return "Terminal"
+
+                # Common terminal apps
+                terminal_apps = ["Cursor", "Terminal", "Warp", "Alacritty", "Kitty", "Hyper"]
+                for term in terminal_apps:
+                    if term.lower() in lowered:
+                        return term
+                # Return whatever is frontmost as fallback
+                return app_name if app_name else "Terminal"
+        except Exception:
+            pass
+        
+        # Final fallback
+        return "Terminal"
 
     def switch_to(self, application: str, wait: Optional[float] = None) -> bool:
         """Switch to application screen.

@@ -99,7 +99,7 @@ OPTION 2: [description]
 
     if not ("YES" in analysis.upper() and "PANEL OPEN" in analysis.upper()):
         print("\n⚠️  No panel detected to close!")
-        client.execute_action("switch_desktop", text="iTerm")
+        client.execute_action("switch_desktop", text="Terminal")
         play_sound()
         return
 
@@ -121,7 +121,7 @@ OPTION 2: [description]
             time.sleep(2.0)
 
             # Switch back to terminal and ask user
-            client.execute_action("switch_desktop", text="iTerm")
+            client.execute_action("switch_desktop", text="Terminal")
             time.sleep(1.0)
 
             result = ask_user(f"Did clicking ({x}, {y}) close the panel?")
@@ -150,7 +150,7 @@ OPTION 2: [description]
     time.sleep(2.0)
 
     # Switch back and ask
-    client.execute_action("switch_desktop", text="iTerm")
+    client.execute_action("switch_desktop", text="Terminal")
     time.sleep(1.0)
 
     result = ask_user("Did pressing Escape close the panel?")

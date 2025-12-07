@@ -42,7 +42,7 @@ Alternatively, manually grant permissions:
 2. Go to **Privacy & Security** → **Accessibility**
 3. Click the lock icon 🔒 and authenticate
 4. Look for one of these in the list:
-   - Your Terminal app (Terminal, iTerm2, Warp, etc.)
+   - Your terminal app (Cursor, Terminal, Warp, etc.)
    - Python (`/Users/thierry/Documents/code/actioner-test/venv/bin/python`)
 5. Check the box ☑️ to enable it
 6. If not in the list, click **"+"** and add it manually

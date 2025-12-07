@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from src.agent.anthropic_computer_client import AnthropicComputerClient
 
 def play_sound():
-    """Play notification sound for iTerm2 users."""
+    """Play notification sound for terminal users."""
     try:
         # macOS system sound
         subprocess.run(["afplay", "/System/Library/Sounds/Glass.aiff"],
@@ -181,8 +181,8 @@ UNCLEAR - Can't determine"""
     # Step 8: Switch back to terminal and notify user
     print("\n[8] Switching back to TERMINAL screen...")
     # Note: We don't have a direct "switch to terminal" action
-    # But we can click on iTerm2 or terminal
-    client.execute_action("switch_desktop", text="iTerm")
+    # But we can click on a terminal app
+    client.execute_action("switch_desktop", text="Terminal")
     time.sleep(1.0)
 
     print("\n🔔 PLAYING SOUND - Test complete, switched back to terminal")

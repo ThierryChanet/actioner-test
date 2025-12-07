@@ -41,7 +41,7 @@ class AXClient:
                 f"1. Open System Settings > Privacy & Security > Accessibility\n"
                 f"2. Click the lock icon to make changes\n"
                 f"3. Look for one of these in the list:\n"
-                f"   - Your Terminal app (Terminal, iTerm2, etc.)\n"
+                f"   - Your terminal app (Cursor, Terminal, Warp, etc.)\n"
                 f"   - Python ({python_path})\n"
                 f"4. Check the box to enable it\n"
                 f"5. If not in the list, click '+' and add it\n"

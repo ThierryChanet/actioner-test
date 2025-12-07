@@ -71,7 +71,7 @@ def main():
 
         # Switch back to terminal
         print("[5] Switching back to terminal...")
-        client.execute_action("switch_desktop", text="iTerm")
+        client.execute_action("switch_desktop", text="Terminal")
         time.sleep(1.0)
         play_sound()
 

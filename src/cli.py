@@ -1866,7 +1866,7 @@ def check_permissions(ctx):
         print("1. Open: System Settings > Privacy & Security > Accessibility")
         print("2. Click the lock icon to make changes")
         print("3. Look for one of these apps:")
-        print(f"   - Your Terminal app (Terminal, iTerm2, Warp, etc.)")
+        print(f"   - Your terminal app (Cursor, Terminal, Warp, etc.)")
         print(f"   - Python: {sys.executable}")
         print("4. Check the box next to it to enable")
         print("5. If not listed, click '+' and add it")
