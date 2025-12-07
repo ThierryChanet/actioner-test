@@ -82,9 +82,9 @@ class ScreenManager:
                 app_name = result.stdout.strip()
                 lowered = app_name.lower() if app_name else ""
 
-                # Avoid switching back to legacy terminal variants; prefer a generic terminal target
+                # Return iTerm2 if detected (stay in the current terminal)
                 if "iterm" in lowered:
-                    return "Terminal"
+                    return "iTerm2"
 
                 # Common terminal apps
                 terminal_apps = ["Cursor", "Terminal", "Warp", "Alacritty", "Kitty", "Hyper"]
