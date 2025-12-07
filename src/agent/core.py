@@ -72,6 +72,13 @@ You have access to these tools:
 - If something fails, explain why and suggest alternatives
 - Never refuse a request - always try or ask for clarification
 
+## Debug Mode
+
+When the user's request includes a `[DEBUG]` tag, you are in debugging mode:
+- Work step-by-step, explaining your plan and the next action before you take it
+- After each major action or short sequence of actions, ask the user to confirm that things look correct before proceeding
+- Be conservative with tool usage; only call tools when they are needed to understand, verify, or unblock the next step
+
 ## Example Interactions
 
 User: "Extract all my recipes"
@@ -120,17 +127,18 @@ COMPUTER_USE_SYSTEM_PROMPT = """You are a Computer Control Expert assistant with
 
 ## Computer Control Best Practices
 
-1. **Always Screenshot First**: Before taking actions, take a screenshot to see what's on screen
+1. **Screenshot When Needed**: Take a screenshot when you need to understand the current state or when the screen may have changed in a non-obvious way. Avoid unnecessary screenshots.
 2. **Desktop Switching**: If the target application (e.g., Notion) is not visible, use switch_desktop to find it
 3. **Coordinate System**: Screen coordinates start at (0,0) in top-left corner
 4. **Be Precise**: Use exact coordinates from screenshot analysis
 5. **Wait After Actions**: Some actions need time to complete (navigation, loading)
-6. **VERIFY EVERY ACTION**: Take another screenshot after EVERY click/action to confirm it worked
+6. **Verify Important Actions**: For important or uncertain actions (like complex navigation or destructive operations), take a screenshot to confirm they worked as expected.
 7. **Sequential Actions**: Break complex tasks into small sequential steps
+8. **Reuse Visual Context**: When possible, rely on your most recent screenshot and reasoning instead of capturing a new screenshot.
 
 ## CRITICAL: Verify Your Actions - Report Honestly!
 
-**After EVERY click or keyboard action, you MUST:**
+**When you choose to visually verify an action, you MUST:**
 1. Take a screenshot to see what actually happened
 2. Check if the expected UI change occurred
 3. Report HONESTLY what you observe:
@@ -139,18 +147,18 @@ COMPUTER_USE_SYSTEM_PROMPT = """You are a Computer Control Expert assistant with
    - ✗ BAD: "I successfully clicked the button" (don't assume without checking!)
    - ✗ BAD: "The action should have worked" (verify visually!)
 
-**Never claim success without visual verification!** If you don't see the expected change in the screenshot after clicking, be honest and try again with different coordinates.
+**Never claim success without reasonable verification!** Prefer to verify with a screenshot for important or uncertain actions; for simple, low-risk operations you can rely on your reasoning.
 
 ## Navigation Workflow
 
-1. Take screenshot to see current screen
+1. When needed, take a screenshot to see the current screen and locate elements
 2. Identify target UI elements and their coordinates
 3. Click on elements (sidebar items, buttons, links)
-4. **IMMEDIATELY take another screenshot to verify the click worked**
+4. For important or uncertain actions, take another screenshot to verify the click worked
 5. Type text if needed (search, filters)
-6. **IMMEDIATELY take another screenshot to verify the text was entered**
+6. If you're unsure the text was entered correctly or the UI changed as expected, take a screenshot to verify
 7. Press keys for special actions (Return, Escape, arrows)
-8. **IMMEDIATELY take another screenshot to verify the action completed**
+8. For multi-step or risky flows, periodically take screenshots to confirm you're still on the correct screen
 
 ## Extraction Workflow
 
@@ -159,6 +167,13 @@ COMPUTER_USE_SYSTEM_PROMPT = """You are a Computer Control Expert assistant with
 3. Use extract_page_content or extract_database
 4. Summarize the extracted content
 5. Report results to user
+
+## Debug Mode
+
+When the user's request includes a `[DEBUG]` tag, you are in debugging mode:
+- Work step-by-step, explaining your plan and the next action before you take it
+- After each major action or short sequence of actions, ask the user to confirm that things look correct on their screen before proceeding
+- Be especially conservative with mouse/keyboard actions and screenshots; only take screenshots when they are necessary to understand or verify the state
 
 ## Example Interactions
 
@@ -230,7 +245,7 @@ class NotionAgent:
             notion_token: Optional Notion API token
             output_dir: Directory for output files
             model: Specific model to use (auto-selects if None)
-            temperature: LLM temperature (0 = deterministic)
+            temperature: LLM temperature (0.2 = slightly more creative, still controlled)
             verbose: Enable verbose logging (deprecated, use verbosity)
             verbosity: Verbosity level (silent, minimal, default, verbose)
             computer_use: Enable Computer Use via Anthropic (default: True)
@@ -323,7 +338,29 @@ class NotionAgent:
         
         # Initialize agent
         self.agent_executor = self._create_agent()
-    
+
+    def _parse_debug_flags(self, query: str) -> tuple[str, bool]:
+        """Detect in-query debug tags like [DEBUG] and return cleaned query and debug flag."""
+        if not isinstance(query, str):
+            return query, False
+
+        cleaned = query
+        lowered = query.lower()
+        debug_tags = ["[debug]", "#debug", "debug:"]
+        debug_mode = False
+
+        for tag in debug_tags:
+            idx = lowered.find(tag)
+            if idx != -1:
+                debug_mode = True
+                cleaned = (cleaned[:idx] + cleaned[idx + len(tag):]).strip()
+                lowered = cleaned.lower()
+                break
+
+        # Fallback to original query if cleaning produced empty string
+        cleaned = cleaned if cleaned else query.strip()
+        return cleaned, debug_mode
+
     def _init_llm(self, model: Optional[str], temperature: float):
         """Initialize OpenAI LLM.
         
@@ -402,7 +439,22 @@ class NotionAgent:
             Agent's response
         """
         try:
-            result = self.agent_executor.invoke({"input": query})
+            # Detect optional debug tags in the query
+            clean_query, debug_mode = self._parse_debug_flags(query)
+
+            # Augment input with debug instructions when requested
+            input_text = clean_query
+            if debug_mode:
+                debug_instructions = (
+                    "\n\n[DEBUG MODE]\n"
+                    "For this request, work step-by-step. Explain your plan and, after each major action "
+                    "or short sequence of actions, ask the user to confirm that things look correct before "
+                    "you continue. Use screenshots and other tools sparingly, only when needed to understand "
+                    "or verify the state."
+                )
+                input_text = f"{clean_query}\n{debug_instructions}"
+
+            result = self.agent_executor.invoke({"input": input_text})
             response = result.get("output", "No response generated")
 
             # Play completion sound to notify user

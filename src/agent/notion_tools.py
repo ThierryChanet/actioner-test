@@ -17,6 +17,7 @@ from langchain.tools import BaseTool
 
 from .state import AgentState
 from .callbacks import show_progress
+from .screen_manager import NotionScreenManager
 
 
 class NotionOpenPageInput(BaseModel):
@@ -263,27 +264,29 @@ class NotionClosePageTool(BaseTool):
         """Close the Notion recipe page by clicking the close button."""
         show_progress("Attempting to close recipe page...")
 
+        # Initialize screen manager
+        screen_mgr = NotionScreenManager(self.client)
+
         try:
-            # Step 1: Ensure we're focused on Notion window
-            show_progress("Switching to Notion window...")
-            self.client.execute_action("switch_desktop", text="Notion")
-            time.sleep(2.0)  # Wait for desktop switch to complete
+            # Use context manager for automatic screen switching and notification
+            with screen_mgr.for_action("panel close"):
+                # Step 1: Take before screenshot
+                before_screenshot = self.client.take_screenshot(use_cache=False)
 
-            # Step 2: Take before screenshot to check current state
-            before_screenshot = self.client.take_screenshot(use_cache=False)
+                # Step 2: Click the close button
+                # Coordinates (710, 70) = close button location
+                # (horizontally near middle, right below tabs section)
+                show_progress("Clicking close button...")
+                self.client.execute_action("left_click", coordinate=(710, 70))
+                time.sleep(1.5)
 
-            # Step 3: Press Escape to close the right panel
-            show_progress("Pressing Escape to close right panel...")
-            self.client.execute_action("key", text="Escape")
-            time.sleep(1.5)
+                # Step 3: Take after screenshot to verify
+                after_screenshot = self.client.take_screenshot(use_cache=False)
 
-            # Step 4: Take after screenshot to verify
-            after_screenshot = self.client.take_screenshot(use_cache=False)
+                # Step 4: Verify the panel closed
+                show_progress("Verifying panel closed...")
 
-            # Step 5: Verify the panel closed by checking left panel expansion
-            show_progress("Verifying panel closed...")
-
-            prompt = """Compare these two Notion screenshots (BEFORE and AFTER pressing Escape).
+                prompt = """Compare these two Notion screenshots (BEFORE and AFTER pressing Escape).
 
 TASK: Did the right panel close and the left panel expand to full width?
 
@@ -296,65 +299,68 @@ SUCCESS - Right panel closed, left expanded to full width
 FAILED - Right panel still visible, left still narrow
 UNCLEAR - Cannot determine"""
 
-            response = self.client.client.messages.create(
-                model=self.client.model,
-                max_tokens=50,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "BEFORE:"
-                            },
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/png",
-                                    "data": before_screenshot
+                response = self.client.client.messages.create(
+                    model=self.client.model,
+                    max_tokens=50,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "BEFORE:"
+                                },
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/png",
+                                        "data": before_screenshot
+                                    }
+                                },
+                                {
+                                    "type": "text",
+                                    "text": "AFTER:"
+                                },
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/png",
+                                        "data": after_screenshot
+                                    }
+                                },
+                                {
+                                    "type": "text",
+                                    "text": prompt
                                 }
-                            },
-                            {
-                                "type": "text",
-                                "text": "AFTER:"
-                            },
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/png",
-                                    "data": after_screenshot
-                                }
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt
-                            }
-                        ]
-                    }
-                ]
-            )
+                            ]
+                        }
+                    ]
+                )
 
-            result_text = response.content[0].text.strip()
+                result_text = response.content[0].text.strip()
 
-            if "SUCCESS" in result_text:
-                return json.dumps({
-                    "status": "success",
-                    "method": "escape_key",
-                    "message": "Successfully closed right panel with Escape key",
-                    "verification": "Left panel expanded to full width"
-                }, indent=2)
-            else:
-                return json.dumps({
-                    "status": "failed",
-                    "method": "escape_key",
-                    "message": "Escape key did not close the panel",
-                    "verification_result": result_text,
-                    "note": "Panel may need manual closing or different approach"
-                }, indent=2)
+                # Context manager will automatically switch back and notify
+
+                if "SUCCESS" in result_text:
+                    return json.dumps({
+                        "status": "success",
+                        "method": "escape_key",
+                        "message": "Successfully closed right panel with Escape key",
+                        "verification": "Left panel expanded to full width"
+                    }, indent=2)
+                else:
+                    return json.dumps({
+                        "status": "failed",
+                        "method": "escape_key",
+                        "message": "Escape key did not close the panel",
+                        "verification_result": result_text,
+                        "note": "Panel may need manual closing or different approach"
+                    }, indent=2)
 
         except Exception as e:
+            # Context manager handles switch back and notification even on error
             return json.dumps({
                 "status": "error",
                 "message": f"Failed to close recipe page: {e}"
