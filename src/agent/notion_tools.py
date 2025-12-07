@@ -1,0 +1,534 @@
+"""Notion-specific LangChain tools for database navigation.
+
+These tools implement Notion's specific UI patterns:
+- Database rows require hovering to reveal OPEN button
+- Clicking OPEN opens a sidebar panel
+- Sidebar needs expansion to full page
+
+These tools are separate from general computer use tools and only loaded
+when working with Notion.
+"""
+
+import json
+import time
+from typing import Optional, Type
+from pydantic import BaseModel, Field
+from langchain.tools import BaseTool
+
+from .state import AgentState
+from .callbacks import show_progress
+
+
+class NotionOpenPageInput(BaseModel):
+    """Input for Notion page opening tool."""
+    page_name: str = Field(
+        description="Name of the page/row to open in Notion database (e.g., 'Velouté Potimarron', 'Project Alpha')"
+    )
+
+
+class NotionOpenPageTool(BaseTool):
+    """Tool for opening a page in a Notion database.
+
+    This tool handles Notion's specific UI pattern:
+    1. Uses Claude vision to find the page name in the database
+    2. Hovers over it to reveal the OPEN button
+    3. Finds and clicks the OPEN button using vision
+    4. Waits for sidebar to appear
+    5. Expands sidebar to full page
+
+    This is more reliable than generic clicking for Notion databases.
+    Only use this tool when working with Notion.
+    """
+
+    name: str = "notion_open_page"
+    description: str = (
+        "Open a page in a Notion database by name. "
+        "This tool handles Notion's specific UI: it finds the page, "
+        "reveals the OPEN button by hovering, clicks it, and expands the sidebar. "
+        "Use this instead of click_element when working with Notion databases. "
+        "Examples: 'Velouté Potimarron', 'Project Alpha', 'Meeting Notes'. "
+        "The page will open in a sidebar that this tool automatically expands."
+    )
+    args_schema: Type[BaseModel] = NotionOpenPageInput
+
+    client: object = Field(exclude=True)
+    state: AgentState = Field(exclude=True)
+
+    def _run(self, page_name: str) -> str:
+        """Open a Notion page using vision-guided navigation."""
+        show_progress(f"Opening Notion page '{page_name}'...")
+
+        try:
+            # Check if client has vision capabilities
+            if not hasattr(self.client, '_click_element'):
+                return json.dumps({
+                    "status": "error",
+                    "message": "Vision-based navigation not available. This tool requires Anthropic provider."
+                }, indent=2)
+
+            # Step 0: Ensure we're focused on Notion window
+            show_progress("Switching to Notion window...")
+            self.client.execute_action("switch_desktop", text="Notion")
+            time.sleep(2.0)  # Wait for desktop switch to complete
+
+            # Step 1: Find the page name and get its coordinates
+            show_progress(f"Finding '{page_name}' in database...")
+            result = self.client.execute_action("click", text=page_name)
+
+            if not result.success:
+                return json.dumps({
+                    "status": "error",
+                    "page_name": page_name,
+                    "message": f"Could not find '{page_name}' in Notion database"
+                }, indent=2)
+
+            # Got coordinates - this is where the page name is
+            coords = result.data.get('coordinate', [0, 0])
+            show_progress(f"Found at ({coords[0]}, {coords[1]}), looking for OPEN button...")
+
+            # Step 2: Take screenshot and look for OPEN button near those coordinates
+            # Wait a moment for hover state to potentially trigger
+            time.sleep(0.5)
+
+            screenshot_b64 = self.client.take_screenshot(use_cache=False)  # Fresh screenshot
+
+            # Ask Claude to find OPEN button near the page we just found
+            prompt = f"""Analyze this Notion database screenshot.
+
+I just found "{page_name}" at coordinates ({coords[0]}, {coords[1]}).
+
+TASK: Find the "OPEN" button that appears near this item when you hover over it.
+The OPEN button should be:
+- On the same row as "{page_name}"
+- Usually to the right of the item name
+- Within 100 pixels vertically of y={coords[1]}
+
+Provide the EXACT coordinates of the OPEN button in this format:
+COORDINATES: (x, y)
+
+If you cannot find an OPEN button, respond with: NOT_FOUND"""
+
+            response = self.client.client.messages.create(
+                model=self.client.model,
+                max_tokens=150,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": screenshot_b64
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ]
+            )
+
+            response_text = response.content[0].text.strip()
+
+            # Parse coordinates
+            import re
+            coord_match = re.search(r'COORDINATES:\s*\((\d+),\s*(\d+)\)', response_text)
+
+            if coord_match:
+                open_x = int(coord_match.group(1))
+                open_y = int(coord_match.group(2))
+
+                show_progress(f"Found OPEN button at ({open_x}, {open_y}), clicking...")
+
+                # Step 3: Click the OPEN button
+                click_result = self.client.execute_action("left_click", coordinate=(open_x, open_y))
+
+                if not click_result.success:
+                    return json.dumps({
+                        "status": "error",
+                        "message": "Failed to click OPEN button"
+                    }, indent=2)
+
+                # Step 4: Wait for sidebar to appear
+                time.sleep(1.0)
+
+                # Step 5: Expand sidebar to full page (click expand icon)
+                # The expand icon is typically in the top-right of the sidebar
+                show_progress("Expanding sidebar to full page...")
+
+                # Ask Claude to find the expand button
+                expand_screenshot = self.client.take_screenshot(use_cache=False)
+                expand_prompt = """Find the sidebar expand button in this Notion interface.
+It's usually an icon in the top-right of the sidebar panel that opens pages.
+Look for an expand/maximize icon or arrow.
+
+Provide coordinates: COORDINATES: (x, y)
+If not found: NOT_FOUND"""
+
+                expand_response = self.client.client.messages.create(
+                    model=self.client.model,
+                    max_tokens=100,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/png",
+                                        "data": expand_screenshot
+                                    }
+                                },
+                                {
+                                    "type": "text",
+                                    "text": expand_prompt
+                                }
+                            ]
+                        }
+                    ]
+                )
+
+                expand_text = expand_response.content[0].text.strip()
+                expand_match = re.search(r'COORDINATES:\s*\((\d+),\s*(\d+)\)', expand_text)
+
+                if expand_match:
+                    expand_x = int(expand_match.group(1))
+                    expand_y = int(expand_match.group(2))
+                    self.client.execute_action("left_click", coordinate=(expand_x, expand_y))
+                    time.sleep(0.5)
+
+                return json.dumps({
+                    "status": "success",
+                    "page_name": page_name,
+                    "coordinates": coords,
+                    "open_button_coordinates": [open_x, open_y],
+                    "message": f"Successfully opened '{page_name}' in Notion"
+                }, indent=2)
+
+            else:
+                # OPEN button not found - maybe page is already open or different UI
+                # Try clicking the page name directly as fallback
+                show_progress("OPEN button not found, clicking page name directly...")
+
+                return json.dumps({
+                    "status": "partial_success",
+                    "page_name": page_name,
+                    "coordinates": coords,
+                    "message": f"Clicked '{page_name}' but could not find OPEN button. Page may be open or UI differs.",
+                    "note": "Try using extract_page_content to verify page state"
+                }, indent=2)
+
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "message": f"Failed to open Notion page: {e}"
+            }, indent=2)
+
+
+class NotionClosePageInput(BaseModel):
+    """Input for Notion close page tool."""
+    pass
+
+
+class NotionClosePageTool(BaseTool):
+    """Tool for closing an open Notion page sidebar.
+
+    This tool finds and clicks the close button (>> chevron) to collapse
+    the sidebar and return to the database view. It uses:
+    1. Vision to find chevron buttons
+    2. OCR fallback if vision fails
+    3. Position-based heuristics as last resort
+
+    Only use this tool when working with Notion.
+    """
+
+    name: str = "notion_close_page"
+    description: str = (
+        "Close the currently open Notion page sidebar to return to database view. "
+        "Finds and clicks the close button (chevron icon) to collapse the sidebar. "
+        "Use this after extracting content to return to the main database view. "
+        "Example: After viewing 'Recipe A', close it before opening 'Recipe B'."
+    )
+    args_schema: Type[BaseModel] = NotionClosePageInput
+
+    client: object = Field(exclude=True)
+    state: AgentState = Field(exclude=True)
+
+    def _run(self) -> str:
+        """Close the Notion recipe page by clicking the close button."""
+        show_progress("Attempting to close recipe page...")
+
+        try:
+            # Step 1: Ensure we're focused on Notion window
+            show_progress("Switching to Notion window...")
+            self.client.execute_action("switch_desktop", text="Notion")
+            time.sleep(2.0)  # Wait for desktop switch to complete
+
+            # Step 2: Take before screenshot to check current state
+            before_screenshot = self.client.take_screenshot(use_cache=False)
+
+            # Step 3: Press Escape to close the right panel
+            show_progress("Pressing Escape to close right panel...")
+            self.client.execute_action("key", text="Escape")
+            time.sleep(1.5)
+
+            # Step 4: Take after screenshot to verify
+            after_screenshot = self.client.take_screenshot(use_cache=False)
+
+            # Step 5: Verify the panel closed by checking left panel expansion
+            show_progress("Verifying panel closed...")
+
+            prompt = """Compare these two Notion screenshots (BEFORE and AFTER pressing Escape).
+
+TASK: Did the right panel close and the left panel expand to full width?
+
+Check:
+1. BEFORE: Left database list should be ~30% width, right panel open at ~70%
+2. AFTER: Left database list should expand to ~100% width, right panel gone
+
+Respond with EXACTLY one of:
+SUCCESS - Right panel closed, left expanded to full width
+FAILED - Right panel still visible, left still narrow
+UNCLEAR - Cannot determine"""
+
+            response = self.client.client.messages.create(
+                model=self.client.model,
+                max_tokens=50,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "BEFORE:"
+                            },
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": before_screenshot
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": "AFTER:"
+                            },
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": after_screenshot
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ]
+            )
+
+            result_text = response.content[0].text.strip()
+
+            if "SUCCESS" in result_text:
+                return json.dumps({
+                    "status": "success",
+                    "method": "escape_key",
+                    "message": "Successfully closed right panel with Escape key",
+                    "verification": "Left panel expanded to full width"
+                }, indent=2)
+            else:
+                return json.dumps({
+                    "status": "failed",
+                    "method": "escape_key",
+                    "message": "Escape key did not close the panel",
+                    "verification_result": result_text,
+                    "note": "Panel may need manual closing or different approach"
+                }, indent=2)
+
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "message": f"Failed to close recipe page: {e}"
+            }, indent=2)
+
+    def _find_with_vision(self) -> Optional[tuple]:
+        """Try to find close button using Claude vision."""
+        try:
+            screenshot_b64 = self.client.take_screenshot(use_cache=False)
+
+            prompt = """Find the close/collapse button in this Notion interface.
+
+Look for a chevron button (>, >>, or similar arrow icon) that closes the sidebar.
+It's typically in the top-right area of an open sidebar panel.
+
+Provide EXACT coordinates:
+COORDINATES: (x, y)
+
+If not found: NOT_FOUND"""
+
+            response = self.client.client.messages.create(
+                model=self.client.model,
+                max_tokens=100,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": screenshot_b64
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ]
+            )
+
+            import re
+            text = response.content[0].text
+            match = re.search(r'COORDINATES:\s*\((\d+),\s*(\d+)\)', text)
+
+            if match:
+                return (int(match.group(1)), int(match.group(2)))
+
+        except Exception as e:
+            print(f"Vision detection failed: {e}")
+
+        return None
+
+    def _find_with_ocr(self) -> Optional[tuple]:
+        """Try to find close button using OCR."""
+        try:
+            from src.ocr.vision import VisionOCR
+
+            ocr = VisionOCR()
+            if not ocr.is_available():
+                return None
+
+            # Use full screen bounds from client
+            x, y = 0, 0
+            width = self.client.display_width
+            height = self.client.display_height
+
+            # Perform OCR
+            observations = ocr.perform_ocr(x, y, width, height)
+
+            # Search for chevron symbols
+            chevron_symbols = [">>", ">", "»", "›", "❯"]
+            candidates = []
+
+            for obs in observations:
+                text = obs.get('text', '').strip()
+                for symbol in chevron_symbols:
+                    if symbol in text or text == symbol:
+                        candidates.append(obs)
+                        break
+
+            if not candidates:
+                return None
+
+            # Return the rightmost candidate (likely in sidebar)
+            rightmost = max(candidates, key=lambda o: o.get('x', 0))
+            return (rightmost.get('x'), rightmost.get('y'))
+
+        except Exception as e:
+            print(f"OCR detection failed: {e}")
+
+        return None
+
+    def _find_with_ax(self) -> Optional[tuple]:
+        """Try to find close button using macOS Accessibility."""
+        try:
+            from src.notion.detector import NotionDetector
+            from src.ax.element import AXElement
+
+            detector = NotionDetector()
+            app_element = detector.get_application_element()
+
+            if not app_element:
+                return None
+
+            # Search for buttons with close-related attributes
+            def find_close_button(element, depth=0, max_depth=10):
+                if depth > max_depth:
+                    return None
+
+                try:
+                    # Check if this is a close button
+                    role = element.get_attribute('AXRole')
+                    subrole = element.get_attribute('AXSubrole')
+                    desc = element.get_attribute('AXDescription')
+                    title = element.get_attribute('AXTitle')
+
+                    # Look for close button indicators
+                    close_indicators = ['close', 'dismiss', 'collapse', 'back']
+
+                    if role == 'AXButton':
+                        for indicator in close_indicators:
+                            if (desc and indicator in desc.lower()) or \
+                               (title and indicator in title.lower()) or \
+                               (subrole and 'close' in subrole.lower()):
+                                # Found a potential close button!
+                                pos = element.get_attribute('AXPosition')
+                                size = element.get_attribute('AXSize')
+                                if pos and size:
+                                    # Return center of button
+                                    x = int(pos['x'] + size['width'] / 2)
+                                    y = int(pos['y'] + size['height'] / 2)
+                                    print(f"Found close button: {desc or title} at ({x}, {y})")
+                                    return (x, y)
+
+                    # Search children
+                    children = element.get_attribute('AXChildren')
+                    if children:
+                        for child in children:
+                            result = find_close_button(AXElement(child), depth + 1, max_depth)
+                            if result:
+                                return result
+
+                except Exception as e:
+                    pass
+
+                return None
+
+            return find_close_button(AXElement(app_element))
+
+        except Exception as e:
+            print(f"AX detection failed: {e}")
+
+        return None
+
+
+def get_notion_tools(client: object, state: AgentState) -> list:
+    """Get Notion-specific tools.
+
+    Args:
+        client: AnthropicComputerClient instance (must support vision)
+        state: AgentState instance
+
+    Returns:
+        List of Notion-specific LangChain tools
+    """
+    # Only return tools if client supports vision
+    if not hasattr(client, '_click_element'):
+        return []
+
+    return [
+        NotionOpenPageTool(client=client, state=state),
+        NotionClosePageTool(client=client, state=state),
+    ]

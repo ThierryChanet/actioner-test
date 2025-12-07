@@ -540,6 +540,89 @@ class GetScreenInfoTool(BaseTool):
             }, indent=2)
 
 
+class ClickElementInput(BaseModel):
+    """Input for click element tool."""
+    element_text: str = Field(
+        description="Text description of the UI element to click (e.g., 'Velouté Potimarron', 'Share button', 'Sign In')"
+    )
+
+
+class ClickElementTool(BaseTool):
+    """Tool for clicking on UI elements by text description using Claude vision.
+
+    This tool leverages Anthropic's vision capabilities to:
+    1. Analyze the current screenshot
+    2. Find the element matching the description
+    3. Determine precise pixel coordinates
+    4. Execute the click
+
+    This is much more reliable than manually guessing coordinates.
+    Only available when using Anthropic provider.
+    """
+
+    name: str = "click_element"
+    description: str = (
+        "Click on a UI element by its text description using Claude vision. "
+        "Claude will analyze the screen, find the element, and click it precisely. "
+        "This is the PREFERRED method for clicking elements when using Anthropic provider. "
+        "Examples: 'Velouté Potimarron', 'Share button', 'Sign In', 'Close tab'. "
+        "Use this instead of move_mouse + left_click for more reliable clicking. "
+        "Claude can find buttons, links, tabs, menu items, and other UI elements by their visible text."
+    )
+    args_schema: Type[BaseModel] = ClickElementInput
+
+    client: AnthropicComputerClient = Field(exclude=True)
+    state: AgentState = Field(exclude=True)
+
+    def _run(self, element_text: str) -> str:
+        """Click on element using Claude vision to find it."""
+        show_progress(f"Finding and clicking '{element_text}' using Claude vision...")
+
+        try:
+            # Check if client supports vision-based clicking
+            if not hasattr(self.client, '_click_element'):
+                return json.dumps({
+                    "status": "error",
+                    "message": "Vision-based clicking not available with this provider. Use move_mouse + left_click instead."
+                }, indent=2)
+
+            # Use the client's element clicking method
+            result = self.client.execute_action("click", text=element_text)
+
+            # Handle ActionResult objects
+            if hasattr(result, 'success'):
+                if result.success:
+                    coords = result.data.get('coordinate', [0, 0])
+                    response = {
+                        "status": "success",
+                        "action": "click_element",
+                        "element": element_text,
+                        "coordinates": coords,
+                        "message": f"Successfully clicked '{element_text}' at ({coords[0]}, {coords[1]})"
+                    }
+
+                    # Add latency if available
+                    if hasattr(result, 'latency_ms'):
+                        response["latency_ms"] = round(result.latency_ms, 1)
+
+                    return json.dumps(response, indent=2)
+                else:
+                    return json.dumps({
+                        "status": "error",
+                        "element": element_text,
+                        "message": result.error or f"Could not find or click '{element_text}'"
+                    }, indent=2)
+            else:
+                # Fallback for dictionary result
+                return json.dumps(result, indent=2)
+
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "message": f"Failed to click element: {e}"
+            }, indent=2)
+
+
 def get_computer_use_tools(client: AnthropicComputerClient, state: AgentState) -> list:
     """Get all computer use tools for the agent.
     
@@ -554,6 +637,7 @@ def get_computer_use_tools(client: AnthropicComputerClient, state: AgentState) -
         ScreenshotTool(client=client, state=state),
         GetScreenInfoTool(client=client, state=state),
         SwitchDesktopTool(client=client, state=state),
+        ClickElementTool(client=client, state=state),  # Vision-based clicking (Anthropic only)
         MouseMoveTool(client=client, state=state),
         LeftClickTool(client=client, state=state),
         RightClickTool(client=client, state=state),

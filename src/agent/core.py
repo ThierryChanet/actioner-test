@@ -19,6 +19,7 @@ from .state import AgentState
 from .tools import get_notion_tools
 from .callbacks import UserInputCallback, ProgressCallback
 from .computer_use_tools import get_computer_use_tools
+from .notion_tools import get_notion_tools as get_notion_specific_tools
 
 # Import Anthropic client for Computer Use
 try:
@@ -221,6 +222,7 @@ class NotionAgent:
         verbosity: VerbosityLevel = "default",
         computer_use: bool = True,
         display_num: int = 1,
+        enable_notion_tools: bool = True,
     ):
         """Initialize the Notion agent.
 
@@ -233,6 +235,7 @@ class NotionAgent:
             verbosity: Verbosity level (silent, minimal, default, verbose)
             computer_use: Enable Computer Use via Anthropic (default: True)
             display_num: Display number for Computer Use (1-based)
+            enable_notion_tools: Enable Notion-specific tools like notion_open_page (default: True, requires vision)
         """
         # Handle deprecated verbose parameter
         if verbose and verbosity == "default":
@@ -242,6 +245,7 @@ class NotionAgent:
         self.verbose = verbosity == "verbose"  # For backward compatibility
         self.output_dir = output_dir
         self.computer_use = computer_use
+        self.enable_notion_tools = enable_notion_tools
         
         # Initialize orchestrator
         self.orchestrator = NotionOrchestrator(
@@ -297,7 +301,15 @@ class NotionAgent:
                 GetCurrentContextTool(orchestrator=self.orchestrator, state=self.state),
                 AskUserTool(orchestrator=self.orchestrator, state=self.state),
             ]
-            self.tools = computer_tools + extraction_tools
+
+            # Conditionally add Notion-specific tools (only with vision-enabled provider)
+            notion_specific_tools = []
+            if self.enable_notion_tools and hasattr(self.anthropic_client, '_click_element'):
+                notion_specific_tools = get_notion_specific_tools(self.anthropic_client, self.state)
+                if self.verbosity in ["verbose", "default"]:
+                    print(f"✓ Loaded {len(notion_specific_tools)} Notion-specific tools")
+
+            self.tools = computer_tools + notion_specific_tools + extraction_tools
         else:
             # Standard tools
             self.tools = get_notion_tools(self.orchestrator, self.state)
@@ -382,16 +394,25 @@ class NotionAgent:
     
     def run(self, query: str) -> str:
         """Run the agent with a query.
-        
+
         Args:
             query: User's natural language query
-            
+
         Returns:
             Agent's response
         """
         try:
             result = self.agent_executor.invoke({"input": query})
-            return result.get("output", "No response generated")
+            response = result.get("output", "No response generated")
+
+            # Play completion sound to notify user
+            try:
+                from notification_sound import play_completion_sound
+                play_completion_sound()
+            except:
+                pass  # Silently fail if notification doesn't work
+
+            return response
         except Exception as e:
             error_msg = f"Agent error: {e}"
             if self.verbose:
@@ -424,7 +445,15 @@ class NotionAgent:
                 GetCurrentContextTool(orchestrator=self.orchestrator, state=self.state),
                 AskUserTool(orchestrator=self.orchestrator, state=self.state),
             ]
-            self.tools = computer_tools + extraction_tools
+
+            # Conditionally add Notion-specific tools (only with vision-enabled provider)
+            notion_specific_tools = []
+            if self.enable_notion_tools and hasattr(self.anthropic_client, '_click_element'):
+                notion_specific_tools = get_notion_specific_tools(self.anthropic_client, self.state)
+                if self.verbosity in ["verbose", "default"]:
+                    print(f"✓ Loaded {len(notion_specific_tools)} Notion-specific tools")
+
+            self.tools = computer_tools + notion_specific_tools + extraction_tools
         else:
             self.tools = get_notion_tools(self.orchestrator, self.state)
         self.agent_executor = self._create_agent()
