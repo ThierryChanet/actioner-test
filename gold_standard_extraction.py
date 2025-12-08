@@ -185,12 +185,10 @@ def extract_all_recipes(
         print(f"Querying for up to {limit} recipes...")
 
     try:
-        response = client.client.databases.query(
+        pages = client.query_database(
             database_id=database_id,
             page_size=min(limit, 100)
         )
-
-        pages = response.get('results', [])
 
         if verbose:
             print(f"✓ Found {len(pages)} recipes")
@@ -282,7 +280,7 @@ def main():
                     print(f"  (No ingredients found)")
 
         # Summary
-        success_count = sum(1 for r in recipe if r['ingredients'])
+        success_count = sum(1 for r in recipes if r['ingredients'])
         total_ingredients = sum(len(r['ingredients']) for r in recipes)
 
         print("\n" + "="*70)

@@ -2,6 +2,7 @@
 
 from typing import Optional, List, Dict, Any
 from notion_client import Client
+import requests
 from ..notion.extractor import Block, ExtractionResult
 
 
@@ -10,10 +11,11 @@ class NotionAPIClient:
 
     def __init__(self, auth_token: str):
         """Initialize the Notion API client.
-        
+
         Args:
             auth_token: Notion integration token
         """
+        self.auth_token = auth_token
         self.client = Client(auth=auth_token)
 
     def get_page(self, page_id: str) -> Dict[str, Any]:
@@ -273,19 +275,29 @@ class NotionAPIClient:
         database_id = database_id.replace("-", "")
         
         try:
-            query_params = {
-                "database_id": database_id,
+            # Build request body
+            body = {
                 "page_size": min(page_size, 100)  # Notion API max is 100
             }
-            
+
             if filter_dict:
-                query_params["filter"] = filter_dict
-            
+                body["filter"] = filter_dict
+
             if sorts:
-                query_params["sorts"] = sorts
-            
-            response = self.client.databases.query(**query_params)
-            return response.get("results", [])
+                body["sorts"] = sorts
+
+            # Use direct HTTP API call (notion-client SDK has compatibility issues)
+            url = f"https://api.notion.com/v1/databases/{database_id}/query"
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Notion-Version": "2022-06-28",
+                "Content-Type": "application/json"
+            }
+
+            response = requests.post(url, headers=headers, json=body)
+            response.raise_for_status()
+
+            return response.json().get("results", [])
             
         except Exception as e:
             raise RuntimeError(f"Failed to query database: {e}")
