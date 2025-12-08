@@ -21,7 +21,8 @@ def extract_recipe(recipe_name: str) -> list:
         f'Hover over the recipe name to reveal the OPEN button to the left. '
         f'Click the OPEN button to open the side panel. '
         f'Extract ALL ingredients from the panel and list them. '
-        f'Then close the panel.'
+        f'IMPORTANT: Press Escape key to close the side panel. '
+        f'Verify the panel is closed before finishing.'
     )
 
     try:

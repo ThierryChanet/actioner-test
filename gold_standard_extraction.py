@@ -15,6 +15,14 @@ from typing import List, Dict, Any
 from datetime import datetime
 from pathlib import Path
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available, will use system environment variables
+    pass
+
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 

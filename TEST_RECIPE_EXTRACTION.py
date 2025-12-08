@@ -41,13 +41,15 @@ def extract_recipe_with_agent(recipe_name: str) -> list:
     # Construct the agent prompt - WORKING IMPLEMENTATION
     # Key: Don't press Escape at start (interrupts agent in terminal)
     # Agent handles switching to Notion automatically
+    # IMPORTANT: Explicitly close panel with Escape to prevent mixing
     prompt = (
         f'Switch to Notion application. '
         f'In the Recipes database table, find "{recipe_name}" in the NAME column. '
         f'Hover over the recipe name to reveal the OPEN button to the left. '
         f'Click the OPEN button to open the side panel. '
         f'Extract ALL ingredients from the panel and list them. '
-        f'Then close the panel.'
+        f'IMPORTANT: Press Escape key to close the side panel. '
+        f'Verify the panel is closed before finishing.'
     )
 
     try:
