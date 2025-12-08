@@ -120,7 +120,7 @@ def main():
     recipes = [
         'Topinambours au vinaigre',
         'Velouté Potimarron',
-        'Aheobakjin',
+        'Aheobakian',
         'Thai omelet',
         'Aubergines au sésame'
     ]
