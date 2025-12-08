@@ -1,0 +1,127 @@
+{
+  "extraction_method": "Notion API (Gold Standard)",
+  "database_id": "5bb4c854c109480ebd7c6112e357b4e5",
+  "extracted_at": "2025-12-08T08:36:10.994487",
+  "recipe_count": 10,
+  "recipes": [
+    {
+      "name": "Beef with celery and carrots",
+      "page_id": "0062b2cb-71fc-4e49-81ec-f68c92d67d90",
+      "ingredients": [
+        "Beef",
+        "Celery",
+        "Carrots",
+        "Oyster sauce",
+        "Garlic / Ail",
+        "Maizena",
+        "Mirin",
+        "Soy Sauce / Sauce Soja"
+      ],
+      "block_count": 10
+    },
+    {
+      "name": "Mille feuille crêpes matcha",
+      "page_id": "01b3e040-ddab-4bb7-9d79-322bcdd86c2e",
+      "ingredients": [],
+      "block_count": 3
+    },
+    {
+      "name": "Udon",
+      "page_id": "0206e256-f66b-4cd5-9619-1d8f8ad2d316",
+      "ingredients": [
+        "Noodle",
+        "Soy Sauce / Sauce Soja",
+        "Ginger",
+        "Mirin",
+        "Chicken Stock"
+      ],
+      "block_count": 7
+    },
+    {
+      "name": "Chicken wings",
+      "page_id": "02c1cc70-b146-4a3b-afea-778093bd2007",
+      "ingredients": [
+        "Chicken wings"
+      ],
+      "block_count": 3
+    },
+    {
+      "name": "Jiezi Bao",
+      "page_id": "05f869a9-69ff-473b-b870-05df00e42c6d",
+      "ingredients": [
+        "Aubergine",
+        "Woqian",
+        "Onion",
+        "Garlic / Ail",
+        "Soy Sauce / Sauce Soja",
+        "Ginger",
+        "Basil"
+      ],
+      "block_count": 9
+    },
+    {
+      "name": "Pasta Salad",
+      "page_id": "0ed82b8e-4549-46d1-865e-c2fb23d8ec29",
+      "ingredients": [
+        "Pasta",
+        "Garlic / Ail",
+        "Olives",
+        "Caper"
+      ],
+      "block_count": 6
+    },
+    {
+      "name": "BLT       ",
+      "page_id": "118fcf04-ef52-4438-a3b9-aa6822b08062",
+      "ingredients": [
+        "Bacon",
+        "Rye Bread",
+        "Mayonnaise",
+        "Tomatoes",
+        "Lettuce"
+      ],
+      "block_count": 7
+    },
+    {
+      "name": "Ramen",
+      "page_id": "13cdedc2-48d2-4b13-9f10-cf27eb6dbf9e",
+      "ingredients": [
+        "Noodle",
+        "Garlic / Ail",
+        "Ginger",
+        "Soy Sauce / Sauce Soja",
+        "Bacon",
+        "Coriandre",
+        "Mushrooms",
+        "Oeufs",
+        "Scallions",
+        "Mirin"
+      ],
+      "block_count": 12
+    },
+    {
+      "name": "Ratatouille",
+      "page_id": "147b5c77-ff3c-8026-8289-ecc629b701fa",
+      "ingredients": [],
+      "block_count": 1
+    },
+    {
+      "name": "Semoule épicée au maïs",
+      "page_id": "147b5c77-ff3c-8051-9f09-e14addc915c8",
+      "ingredients": [
+        "Olive Oil",
+        "Cumin",
+        "Girofle",
+        "Maïs",
+        "Cacahuètes",
+        "Chili Pepper",
+        "Ginger",
+        "Curcuma",
+        "Coconut Milk",
+        "Green lemon",
+        "Coriandre"
+      ],
+      "block_count": 13
+    }
+  ]
+}
