@@ -6,7 +6,7 @@ This directory contains tools for validating Computer Use extraction against the
 
 - **gold_standard_extraction.py** - Extract recipes using Notion API (ground truth)
 - **compare_extractions.py** - Compare Computer Use vs API results
-- **TEST_RECIPE_EXTRACTION.py** - Extract recipes using Computer Use agent
+- **scripts/recipe_extraction_comprehensive.py** - Extract recipes using Computer Use agent
 
 ## Database Configuration
 
@@ -74,7 +74,7 @@ Querying for up to 10 recipes...
 ### Step 2: Extract with Computer Use
 
 ```bash
-python3 TEST_RECIPE_EXTRACTION.py
+python3 scripts/recipe_extraction_comprehensive.py
 ```
 
 This uses the Computer Use agent to:
@@ -181,6 +181,6 @@ This is exactly what the gold standard testing reveals!
 
 1. ✅ Created gold standard extraction
 2. ✅ Created comparison tool
-3. ⏳ Modify TEST_RECIPE_EXTRACTION.py to save JSON output
+3. ⏳ Modify scripts/recipe_extraction_comprehensive.py to save JSON output
 4. ⏳ Run full comparison and generate report
 5. ⏳ Iterate on Computer Use extraction to improve accuracy

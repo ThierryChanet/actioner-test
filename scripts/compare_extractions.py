@@ -180,13 +180,13 @@ def compare_extractions(
 
 def main():
     """Example usage of comparison tool."""
-    # Example: Load Computer Use results from TEST_RECIPE_EXTRACTION.py output
-    # In practice, you'd modify TEST_RECIPE_EXTRACTION.py to save results to JSON
+    # Example: Load Computer Use results from recipe_extraction_comprehensive.py output
+    # In practice, you'd modify recipe_extraction_comprehensive.py to save results to JSON
 
     print("This is a comparison utility.")
     print("\nTo use it:")
-    print("1. Run: python3 gold_standard_extraction.py")
-    print("2. Run: python3 TEST_RECIPE_EXTRACTION.py (modify to save results)")
+    print("1. Run: python3 scripts/gold_standard_extraction.py")
+    print("2. Run: python3 scripts/recipe_extraction_comprehensive.py (modify to save results)")
     print("3. Call compare_extractions() with your Computer Use results")
     print()
 

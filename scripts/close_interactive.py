@@ -5,7 +5,8 @@ import sys
 import os
 import time
 import subprocess
-sys.path.insert(0, os.path.dirname(__file__))
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.agent.anthropic_computer_client import AnthropicComputerClient
 

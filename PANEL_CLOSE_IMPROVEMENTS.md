@@ -228,7 +228,7 @@ Implement Solution 4 (Improved Verification)
    - Verify ingredients don't mix
 
 2. **Full regression test:**
-   - Run TEST_RECIPE_EXTRACTION.py
+   - Run scripts/recipe_extraction_comprehensive.py
    - All 5 recipes should close successfully
    - No ingredient mixing
 

@@ -13,7 +13,8 @@ from typing import List, Dict
 from datetime import datetime
 
 # Add src to path
-sys.path.insert(0, '.')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Load environment variables
 try:

@@ -5,7 +5,8 @@ import sys
 import time
 import json
 import re
-sys.path.insert(0, '.')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.agent.anthropic_computer_client import AnthropicComputerClient
 from src.agent.screen_manager import NotionScreenManager
