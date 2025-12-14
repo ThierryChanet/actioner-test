@@ -72,11 +72,12 @@ class NotionOpenPageTool(BaseTool):
             self.client.execute_action("switch_desktop", text="Notion")
             time.sleep(2.0)  # Wait for desktop switch to complete
 
-            # Step 1: Find the page name and get its coordinates
+            # Step 1: Find the page name and hover over it (don't click yet)
             show_progress(f"Finding '{page_name}' in database...")
-            result = self.client.execute_action("click", text=page_name)
+            # Use mouse_move to find and hover over the recipe without clicking
+            hover_result = self.client.execute_action("mouse_move", text=page_name)
 
-            if not result.success:
+            if not hover_result.success:
                 return json.dumps({
                     "status": "error",
                     "page_name": page_name,
@@ -84,30 +85,33 @@ class NotionOpenPageTool(BaseTool):
                 }, indent=2)
 
             # Got coordinates - this is where the page name is
-            coords = result.data.get('coordinate', [0, 0])
-            show_progress(f"Found at ({coords[0]}, {coords[1]}), looking for OPEN button...")
+            coords = hover_result.data.get('coordinate', [0, 0])
+            show_progress(f"Found '{page_name}' at ({coords[0]}, {coords[1]}), hovering...")
 
-            # Step 2: Take screenshot and look for OPEN button near those coordinates
-            # Wait a moment for hover state to potentially trigger
-            time.sleep(0.5)
+            # Step 2: Wait for "OPEN" button to appear after hover
+            show_progress("Waiting for OPEN button to appear...")
+            time.sleep(1.0)  # Wait for hover state to trigger and button to appear
 
+            # Step 3: Take fresh screenshot and look for OPEN button
             screenshot_b64 = self.client.take_screenshot(use_cache=False)  # Fresh screenshot
 
-            # Ask Claude to find OPEN button near the page we just found
+            # Ask Claude to find OPEN button near the page we just hovered over
             prompt = f"""Analyze this Notion database screenshot.
 
-I just found "{page_name}" at coordinates ({coords[0]}, {coords[1]}).
+I just hovered over "{page_name}" at coordinates ({coords[0]}, {coords[1]}).
+The mouse cursor is currently positioned over this item.
 
-TASK: Find the "OPEN" button that appears near this item when you hover over it.
+TASK: Find the "OPEN" button that should have appeared after hovering.
 The OPEN button should be:
-- On the same row as "{page_name}"
-- Usually to the right of the item name
-- Within 100 pixels vertically of y={coords[1]}
+- On the SAME horizontal line as "{page_name}" (y-coordinate within 50 pixels of {coords[1]})
+- Usually to the LEFT of the item name (x-coordinate less than {coords[0]})
+- A small button with text "OPEN" or an open icon
+- Visible only when hovering over the row
 
-Provide the EXACT coordinates of the OPEN button in this format:
+Provide the EXACT pixel coordinates of the center of the OPEN button in this format:
 COORDINATES: (x, y)
 
-If you cannot find an OPEN button, respond with: NOT_FOUND"""
+If you cannot find an OPEN button on the same horizontal line, respond with: NOT_FOUND"""
 
             response = self.client.client.messages.create(
                 model=self.client.model,
@@ -145,7 +149,7 @@ If you cannot find an OPEN button, respond with: NOT_FOUND"""
 
                 show_progress(f"Found OPEN button at ({open_x}, {open_y}), clicking...")
 
-                # Step 3: Click the OPEN button
+                # Step 4: Click the OPEN button
                 click_result = self.client.execute_action("left_click", coordinate=(open_x, open_y))
 
                 if not click_result.success:
@@ -154,10 +158,10 @@ If you cannot find an OPEN button, respond with: NOT_FOUND"""
                         "message": "Failed to click OPEN button"
                     }, indent=2)
 
-                # Step 4: Wait for sidebar to appear
+                # Step 5: Wait for sidebar to appear
                 time.sleep(1.0)
 
-                # Step 5: Expand sidebar to full page (click expand icon)
+                # Step 6: Expand sidebar to full page (click expand icon)
                 # The expand icon is typically in the top-right of the sidebar
                 show_progress("Expanding sidebar to full page...")
 

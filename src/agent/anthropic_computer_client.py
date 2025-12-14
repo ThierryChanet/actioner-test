@@ -757,6 +757,127 @@ No other text."""
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, move_event)
         time.sleep(0.01)
 
+    def hover_and_find_open_button(
+        self,
+        recipe_coords: Tuple[int, int],
+        recipe_name: str,
+        wait_time: float = 1.5
+    ) -> Dict[str, Any]:
+        """Hover over a recipe and find the Open button using vision.
+
+        This is a helper method for the common pattern of:
+        1. Hovering over a recipe/item
+        2. Waiting for the Open button to appear
+        3. Using vision to find and return the Open button coordinates
+
+        Args:
+            recipe_coords: (x, y) coordinates of the recipe in screenshot space
+            recipe_name: Name of the recipe/item for context in vision prompt
+            wait_time: Time to wait after hovering for button to appear (default: 1.5s)
+
+        Returns:
+            Dictionary with:
+            - success: bool
+            - open_button_coords: (x, y) if found, None otherwise
+            - error: error message if failed
+        """
+        try:
+            # Move mouse to recipe coordinates (hover)
+            move_result = self._mouse_move(recipe_coords[0], recipe_coords[1])
+            if not move_result.get("success", False):
+                return {
+                    "success": False,
+                    "error": "Failed to move mouse to recipe coordinates"
+                }
+
+            # Wait for Open button to appear
+            time.sleep(wait_time)
+
+            # Take fresh screenshot
+            screenshot_b64 = self.take_screenshot(use_cache=False)
+
+            # Use vision to find Open button
+            prompt = f"""Analyze this Notion database screenshot.
+
+I just hovered over "{recipe_name}" at coordinates ({recipe_coords[0]}, {recipe_coords[1]}).
+The mouse cursor is currently positioned over this item.
+
+TASK: Find the "OPEN" button that should have appeared after hovering.
+The OPEN button should be:
+- On the SAME horizontal line as "{recipe_name}" (y-coordinate within 50 pixels of {recipe_coords[1]})
+- Usually to the LEFT of the item name (x-coordinate less than {recipe_coords[0]})
+- A small button with text "OPEN" or an open icon
+- Visible only when hovering over the row
+
+Provide the EXACT pixel coordinates of the center of the OPEN button in this format:
+COORDINATES: (x, y)
+
+If you cannot find an OPEN button on the same horizontal line, respond with: NOT_FOUND"""
+
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=150,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": screenshot_b64
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ],
+                temperature=0
+            )
+
+            response_text = ""
+            for block in response.content:
+                if block.type == "text":
+                    response_text += block.text
+
+            # Parse coordinates
+            import re
+            coord_match = re.search(r'COORDINATES:\s*\((\d+),\s*(\d+)\)', response_text)
+
+            if coord_match:
+                open_x = int(coord_match.group(1))
+                open_y = int(coord_match.group(2))
+
+                # Validate coordinates
+                if 0 <= open_x <= self.display_width and 0 <= open_y <= self.display_height:
+                    return {
+                        "success": True,
+                        "open_button_coords": (open_x, open_y),
+                        "recipe_coords": recipe_coords,
+                        "recipe_name": recipe_name
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Open button coordinates ({open_x}, {open_y}) out of bounds"
+                    }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Could not find Open button for '{recipe_name}' after hovering",
+                    "vision_response": response_text
+                }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to hover and find Open button: {e}"
+            }
+
     def _type_text(self, text: str) -> Dict[str, Any]:
         """Type text using system APIs.
 
