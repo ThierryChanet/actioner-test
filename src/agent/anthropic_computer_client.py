@@ -41,9 +41,9 @@ class AnthropicComputerClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "claude-3-haiku-20240307",
-        display_width: int = 1920,
-        display_height: int = 1080,
+        model: str = "claude-sonnet-4-20250514",
+        display_width: Optional[int] = None,
+        display_height: Optional[int] = None,
         display_num: int = 1,
         verbose: bool = False,
         verbosity: VerbosityLevel = "default",
@@ -52,9 +52,9 @@ class AnthropicComputerClient:
 
         Args:
             api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
-            model: Model to use (default: claude-3-5-sonnet-20241022)
-            display_width: Display width in pixels
-            display_height: Display height in pixels
+            model: Model to use (default: claude-sonnet-4-20250514 for better vision)
+            display_width: Display width in pixels (auto-detected if None)
+            display_height: Display height in pixels (auto-detected if None)
             display_num: Display number (1-based)
             verbose: Enable verbose logging (deprecated, use verbosity)
             verbosity: Verbosity level (silent, minimal, default, verbose)
@@ -74,11 +74,12 @@ class AnthropicComputerClient:
             verbosity = "verbose"
 
         self.model = model
-        self.display_width = display_width
-        self.display_height = display_height
         self.display_num = display_num
         self.verbosity = verbosity
         self.verbose = verbosity == "verbose"
+
+        # Auto-detect display dimensions and Retina scaling
+        self._detect_display_dimensions(display_width, display_height)
 
         # Initialize Anthropic client
         self.client = Anthropic(api_key=self.api_key)
@@ -94,7 +95,61 @@ class AnthropicComputerClient:
         if self.verbose:
             print(f"✓ Anthropic Computer Use client initialized")
             print(f"  Model: {self.model}")
-            print(f"  Display: {display_width}x{display_height}")
+            print(f"  Display: {self.display_width}x{self.display_height}")
+
+    def _detect_display_dimensions(self, width: Optional[int], height: Optional[int]):
+        """Detect display dimensions and Retina scaling factor.
+
+        On Retina displays, screenshots are captured at 2x resolution,
+        but mouse coordinates use the logical (1x) resolution.
+        """
+        import Quartz
+        import Cocoa
+
+        # Get display info
+        online_displays = Quartz.CGGetOnlineDisplayList(32, None, None)[1]
+        if self.display_num > len(online_displays):
+            display_id = online_displays[0]
+        else:
+            display_id = online_displays[self.display_num - 1]
+
+        # Get logical size (for mouse coordinates)
+        bounds = Quartz.CGDisplayBounds(display_id)
+        self.logical_width = int(bounds.size.width)
+        self.logical_height = int(bounds.size.height)
+
+        # Get actual screenshot pixel size by taking a test screenshot
+        # CGDisplayPixelsWide returns logical pixels, not actual screenshot resolution
+        image = Quartz.CGDisplayCreateImage(display_id)
+        if image:
+            self.pixel_width = Quartz.CGImageGetWidth(image)
+            self.pixel_height = Quartz.CGImageGetHeight(image)
+        else:
+            # Fallback to display reported pixels
+            self.pixel_width = Quartz.CGDisplayPixelsWide(display_id)
+            self.pixel_height = Quartz.CGDisplayPixelsHigh(display_id)
+
+        # Calculate Retina scale factor (screenshot pixels / logical pixels)
+        self.retina_scale = self.pixel_width / self.logical_width if self.logical_width else 1.0
+
+        # For Claude vision analysis, use the screenshot dimensions (what Claude sees)
+        # Override with user-provided values if specified
+        self.display_width = width if width else self.pixel_width
+        self.display_height = height if height else self.pixel_height
+
+        if self.verbose:
+            print(f"  Display: logical={self.logical_width}x{self.logical_height}, "
+                  f"screenshot={self.pixel_width}x{self.pixel_height}, scale={self.retina_scale}")
+
+    def _scale_coordinates_for_click(self, x: int, y: int) -> Tuple[int, int]:
+        """Scale coordinates from screenshot space to logical screen space.
+
+        Claude analyzes screenshots at pixel resolution (e.g., 2880x1800),
+        but mouse clicks happen at logical resolution (e.g., 1440x900).
+        """
+        scaled_x = int(x / self.retina_scale)
+        scaled_y = int(y / self.retina_scale)
+        return scaled_x, scaled_y
 
     def take_screenshot(self, use_cache: bool = True) -> str:
         """Capture screenshot using system tools.
@@ -205,6 +260,26 @@ class AnthropicComputerClient:
                         success=False,
                         data={},
                         error="Click action requires either coordinate or text",
+                        latency_ms=(time.time() - start_time) * 1000
+                    )
+
+                latency = (time.time() - start_time) * 1000
+                return ActionResult(
+                    success=result.get("success", False),
+                    data=result,
+                    latency_ms=latency
+                )
+
+            elif action == "mouse_move":
+                if coordinate:
+                    result = self._mouse_move(coordinate[0], coordinate[1])
+                elif text:
+                    result = self._mouse_move_to_element(text)
+                else:
+                    return ActionResult(
+                        success=False,
+                        data={},
+                        error="mouse_move action requires either coordinate or text",
                         latency_ms=(time.time() - start_time) * 1000
                     )
 
@@ -376,25 +451,15 @@ Be PRECISE with coordinates - they will be used for clicking."""
             # Take screenshot
             screenshot_b64 = self.take_screenshot()
 
-            # Ask Claude to find the element and provide coordinates
-            # This mimics what Computer Use would do internally
-            prompt = f"""You are analyzing a screenshot to help me click on a specific element.
+            # Ask Claude to find the element - strict format required
+            prompt = f"""Find "{element_text}" in this {self.display_width}x{self.display_height} screenshot.
 
-TASK: Find '{element_text}' in this screenshot and tell me its EXACT pixel coordinates.
+Respond with ONLY: COORDINATES: (x, y)
+Or if not found: NOT_FOUND
 
-INSTRUCTIONS:
-1. Look for text that matches or contains '{element_text}'
-2. Identify the center point of that element
-3. Provide coordinates in this EXACT format: COORDINATES: (x, y)
-4. X and Y must be absolute pixel positions on a {self.display_width}x{self.display_height} screen
-5. Be precise - the coordinates will be used for clicking
+Example: COORDINATES: (500, 300)
 
-IMPORTANT:
-- Respond ONLY with the coordinates line, nothing else
-- Format: COORDINATES: (x, y)
-- Example: COORDINATES: (450, 320)
-
-If you cannot find '{element_text}', respond with: NOT_FOUND"""
+No other text."""
 
             response = self.client.messages.create(
                 model=self.model,
@@ -452,10 +517,16 @@ If you cannot find '{element_text}', respond with: NOT_FOUND"""
                 if self.verbose:
                     print(f"  Parsed coordinates: ({x}, {y})")
 
-                # Validate coordinates are within screen bounds
+                # Validate coordinates are within screen bounds (screenshot space)
                 if 0 <= x <= self.display_width and 0 <= y <= self.display_height:
-                    # Actually perform the click
-                    self._execute_click(x, y)
+                    # Scale coordinates from screenshot space to logical screen space
+                    click_x, click_y = self._scale_coordinates_for_click(x, y)
+
+                    if self.verbose:
+                        print(f"  Scaled for click: ({click_x}, {click_y})")
+
+                    # Actually perform the click at scaled coordinates
+                    self._execute_click(click_x, click_y)
 
                     return {
                         "success": True,
@@ -533,6 +604,158 @@ If you cannot find '{element_text}', respond with: NOT_FOUND"""
         time.sleep(0.02)  # Small delay between down and up
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, up_event)
         time.sleep(0.01)  # Small delay after click
+
+    def _mouse_move(self, x: int, y: int) -> Dict[str, Any]:
+        """Move mouse to coordinates (for hovering).
+
+        Args:
+            x, y: Screen coordinates in screenshot space
+
+        Returns:
+            Result dictionary
+        """
+        try:
+            # Scale coordinates from screenshot space to logical screen space
+            move_x, move_y = self._scale_coordinates_for_click(x, y)
+
+            if self.verbose:
+                print(f"  Moving mouse: ({x}, {y}) -> ({move_x}, {move_y})")
+
+            self._execute_mouse_move(move_x, move_y)
+            return {
+                "success": True,
+                "action": "mouse_move",
+                "coordinate": [x, y],
+                "scaled_coordinate": [move_x, move_y]
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+    def _mouse_move_to_element(self, element_text: str) -> Dict[str, Any]:
+        """Move mouse to an element by text description (for hovering).
+
+        Args:
+            element_text: Text description of element to hover over
+
+        Returns:
+            Result dictionary with success status and coordinates
+        """
+        try:
+            # Take screenshot
+            screenshot_b64 = self.take_screenshot()
+
+            # Ask Claude to find the element - strict format required
+            prompt = f"""Find "{element_text}" in this {self.display_width}x{self.display_height} screenshot.
+
+Respond with ONLY: COORDINATES: (x, y)
+Or if not found: NOT_FOUND
+
+Example: COORDINATES: (500, 300)
+
+No other text."""
+
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=150,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": screenshot_b64
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ],
+                temperature=0
+            )
+
+            response_text = ""
+            for block in response.content:
+                if block.type == "text":
+                    response_text += block.text
+
+            if self.verbose:
+                print(f"  Claude response: {response_text}")
+
+            if "NOT_FOUND" in response_text:
+                return {
+                    "success": False,
+                    "error": f"Element '{element_text}' not found in screenshot"
+                }
+
+            # Parse coordinates
+            import re
+            coord_match = re.search(r'COORDINATES:\s*\((\d+),\s*(\d+)\)', response_text)
+            if not coord_match:
+                coord_match = re.search(r'\((\d+),\s*(\d+)\)', response_text)
+
+            if coord_match:
+                x = int(coord_match.group(1))
+                y = int(coord_match.group(2))
+
+                if 0 <= x <= self.display_width and 0 <= y <= self.display_height:
+                    # Scale and move
+                    move_x, move_y = self._scale_coordinates_for_click(x, y)
+
+                    if self.verbose:
+                        print(f"  Moving to: ({x}, {y}) -> ({move_x}, {move_y})")
+
+                    self._execute_mouse_move(move_x, move_y)
+
+                    return {
+                        "success": True,
+                        "action": "mouse_move",
+                        "coordinate": [x, y],
+                        "scaled_coordinate": [move_x, move_y],
+                        "element": element_text
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Coordinates ({x}, {y}) out of bounds"
+                    }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Could not parse coordinates from response: {response_text}"
+                }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+    def _execute_mouse_move(self, x: int, y: int):
+        """Execute a mouse move using system APIs.
+
+        Args:
+            x, y: Screen coordinates (in logical space)
+        """
+        import Quartz
+
+        move_point = Quartz.CGPoint(x, y)
+        move_event = Quartz.CGEventCreateMouseEvent(
+            None,
+            Quartz.kCGEventMouseMoved,
+            move_point,
+            Quartz.kCGMouseButtonLeft
+        )
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, move_event)
+        time.sleep(0.01)
 
     def _type_text(self, text: str) -> Dict[str, Any]:
         """Type text using system APIs.
