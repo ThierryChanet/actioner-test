@@ -137,6 +137,13 @@ class AnthropicComputerClient:
         self.display_width = width if width else self.pixel_width
         self.display_height = height if height else self.pixel_height
 
+        # Claude Vision coordinate scaling
+        # Anthropic API resizes images to ~1400px width before sending to Claude.
+        # Claude returns coordinates in this scaled-down space.
+        # We store the last known Claude vision dimensions to scale coordinates back.
+        self._claude_vision_width: Optional[int] = None
+        self._claude_vision_height: Optional[int] = None
+
         if self.verbose:
             print(f"  Display: logical={self.logical_width}x{self.logical_height}, "
                   f"screenshot={self.pixel_width}x{self.pixel_height}, scale={self.retina_scale}")
@@ -150,6 +157,92 @@ class AnthropicComputerClient:
         scaled_x = int(x / self.retina_scale)
         scaled_y = int(y / self.retina_scale)
         return scaled_x, scaled_y
+
+    def _scale_claude_vision_coordinates(self, x: int, y: int) -> Tuple[int, int]:
+        """Scale coordinates from Claude Vision space to screenshot space.
+
+        Anthropic API resizes images before sending to Claude. Through calibration testing,
+        we found that Claude sees images at approximately 1389x862 for a 2880x1800 screenshot
+        (roughly 48% of original size, or ~1400px width).
+
+        IMPORTANT: Claude's self-reported image dimensions are unreliable and vary between
+        calls. We use a fixed scaling factor based on calibration testing instead.
+
+        Args:
+            x, y: Coordinates from Claude Vision (in Claude's scaled image space)
+
+        Returns:
+            Coordinates in actual screenshot pixel space
+        """
+        # Fixed Claude Vision dimensions based on calibration testing
+        # Anthropic resizes to approximately 1389x862 for a 2880x1800 image
+        # This is roughly 48.2% of original size (max dimension ~1400px)
+        CLAUDE_VISION_MAX_WIDTH = 1389
+        CLAUDE_VISION_MAX_HEIGHT = 862
+
+        # Calculate what Claude actually sees based on our screenshot aspect ratio
+        screenshot_aspect = self.pixel_width / self.pixel_height
+
+        if screenshot_aspect > (CLAUDE_VISION_MAX_WIDTH / CLAUDE_VISION_MAX_HEIGHT):
+            # Width-limited
+            claude_width = CLAUDE_VISION_MAX_WIDTH
+            claude_height = int(CLAUDE_VISION_MAX_WIDTH / screenshot_aspect)
+        else:
+            # Height-limited
+            claude_height = CLAUDE_VISION_MAX_HEIGHT
+            claude_width = int(CLAUDE_VISION_MAX_HEIGHT * screenshot_aspect)
+
+        scale_x = self.pixel_width / claude_width
+        scale_y = self.pixel_height / claude_height
+
+        scaled_x = int(x * scale_x)
+        scaled_y = int(y * scale_y)
+
+        if self.verbose:
+            print(f"  Vision coord scaling: ({x}, {y}) -> ({scaled_x}, {scaled_y}) [Claude sees ~{claude_width}x{claude_height}, scale: {scale_x:.2f}x{scale_y:.2f}]")
+
+        return scaled_x, scaled_y
+
+    def _detect_claude_vision_dimensions(self, screenshot_b64: str) -> None:
+        """Ask Claude what image dimensions it sees to calibrate coordinate scaling.
+
+        This should be called periodically to ensure accurate coordinate mapping.
+        """
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=50,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": screenshot_b64
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": "What are the pixel dimensions of this image? Reply ONLY with: SIZE: (width, height)"
+                        }
+                    ]
+                }],
+                temperature=0
+            )
+
+            import re
+            response_text = response.content[0].text
+            match = re.search(r'SIZE:\s*\((\d+),\s*(\d+)\)', response_text)
+            if match:
+                self._claude_vision_width = int(match.group(1))
+                self._claude_vision_height = int(match.group(2))
+                if self.verbose:
+                    print(f"  Claude Vision dimensions: {self._claude_vision_width}x{self._claude_vision_height}")
+        except Exception as e:
+            if self.verbose:
+                print(f"  Failed to detect Claude Vision dimensions: {e}")
 
     def take_screenshot(self, use_cache: bool = True) -> str:
         """Capture screenshot using system tools.
@@ -434,12 +527,12 @@ Be PRECISE with coordinates - they will be used for clicking."""
     def _click_element(self, element_text: str) -> Dict[str, Any]:
         """Click on an element by text description using Claude vision.
 
-        Since we're using Haiku (no Computer Use tool), we:
-        1. Ask Claude to analyze the screenshot and find the element
-        2. Parse coordinates from Claude's response
-        3. Click using system APIs
-
-        This mimics Anthropic Computer Use behavior.
+        This method:
+        1. Takes a screenshot
+        2. Asks Claude to find the element (Claude sees a scaled-down image)
+        3. Scales Claude's coordinates back to screenshot space
+        4. Scales from screenshot space to logical space for clicking
+        5. Executes the click
 
         Args:
             element_text: Text description of element to click
@@ -451,8 +544,12 @@ Be PRECISE with coordinates - they will be used for clicking."""
             # Take screenshot
             screenshot_b64 = self.take_screenshot()
 
+            # Calibrate Claude Vision dimensions if not yet known
+            if not self._claude_vision_width:
+                self._detect_claude_vision_dimensions(screenshot_b64)
+
             # Ask Claude to find the element - strict format required
-            prompt = f"""Find "{element_text}" in this {self.display_width}x{self.display_height} screenshot.
+            prompt = f"""Find "{element_text}" in this screenshot.
 
 Respond with ONLY: COORDINATES: (x, y)
 Or if not found: NOT_FOUND
@@ -511,19 +608,26 @@ No other text."""
                 coord_match = re.search(r'\((\d+),\s*(\d+)\)', response_text)
 
             if coord_match:
-                x = int(coord_match.group(1))
-                y = int(coord_match.group(2))
+                # These are Claude Vision coordinates (in scaled-down image space)
+                claude_x = int(coord_match.group(1))
+                claude_y = int(coord_match.group(2))
 
                 if self.verbose:
-                    print(f"  Parsed coordinates: ({x}, {y})")
+                    print(f"  Claude Vision coordinates: ({claude_x}, {claude_y})")
+
+                # Scale from Claude Vision space to screenshot space
+                screenshot_x, screenshot_y = self._scale_claude_vision_coordinates(claude_x, claude_y)
+
+                if self.verbose:
+                    print(f"  Screenshot coordinates: ({screenshot_x}, {screenshot_y})")
 
                 # Validate coordinates are within screen bounds (screenshot space)
-                if 0 <= x <= self.display_width and 0 <= y <= self.display_height:
-                    # Scale coordinates from screenshot space to logical screen space
-                    click_x, click_y = self._scale_coordinates_for_click(x, y)
+                if 0 <= screenshot_x <= self.pixel_width and 0 <= screenshot_y <= self.pixel_height:
+                    # Scale from screenshot space to logical screen space for clicking
+                    click_x, click_y = self._scale_coordinates_for_click(screenshot_x, screenshot_y)
 
                     if self.verbose:
-                        print(f"  Scaled for click: ({click_x}, {click_y})")
+                        print(f"  Click coordinates: ({click_x}, {click_y})")
 
                     # Actually perform the click at scaled coordinates
                     self._execute_click(click_x, click_y)
@@ -531,13 +635,15 @@ No other text."""
                     return {
                         "success": True,
                         "action": "left_click",
-                        "coordinate": [x, y],
+                        "claude_coordinate": [claude_x, claude_y],
+                        "screenshot_coordinate": [screenshot_x, screenshot_y],
+                        "click_coordinate": [click_x, click_y],
                         "element": element_text
                     }
                 else:
                     return {
                         "success": False,
-                        "error": f"Coordinates ({x}, {y}) out of bounds"
+                        "error": f"Coordinates ({screenshot_x}, {screenshot_y}) out of bounds"
                     }
             else:
                 return {
@@ -637,6 +743,12 @@ No other text."""
     def _mouse_move_to_element(self, element_text: str) -> Dict[str, Any]:
         """Move mouse to an element by text description (for hovering).
 
+        This method:
+        1. Takes a screenshot
+        2. Asks Claude to find the element (Claude sees a scaled-down image)
+        3. Scales Claude's coordinates back to screenshot space
+        4. Scales from screenshot space to logical space for mouse movement
+
         Args:
             element_text: Text description of element to hover over
 
@@ -647,8 +759,12 @@ No other text."""
             # Take screenshot
             screenshot_b64 = self.take_screenshot()
 
+            # Calibrate Claude Vision dimensions if not yet known
+            if not self._claude_vision_width:
+                self._detect_claude_vision_dimensions(screenshot_b64)
+
             # Ask Claude to find the element - strict format required
-            prompt = f"""Find "{element_text}" in this {self.display_width}x{self.display_height} screenshot.
+            prompt = f"""Find "{element_text}" in this screenshot.
 
 Respond with ONLY: COORDINATES: (x, y)
 Or if not found: NOT_FOUND
@@ -703,29 +819,40 @@ No other text."""
                 coord_match = re.search(r'\((\d+),\s*(\d+)\)', response_text)
 
             if coord_match:
-                x = int(coord_match.group(1))
-                y = int(coord_match.group(2))
+                # These are Claude Vision coordinates (in scaled-down image space)
+                claude_x = int(coord_match.group(1))
+                claude_y = int(coord_match.group(2))
 
-                if 0 <= x <= self.display_width and 0 <= y <= self.display_height:
-                    # Scale and move
-                    move_x, move_y = self._scale_coordinates_for_click(x, y)
+                if self.verbose:
+                    print(f"  Claude Vision coordinates: ({claude_x}, {claude_y})")
+
+                # Scale from Claude Vision space to screenshot space
+                screenshot_x, screenshot_y = self._scale_claude_vision_coordinates(claude_x, claude_y)
+
+                if self.verbose:
+                    print(f"  Screenshot coordinates: ({screenshot_x}, {screenshot_y})")
+
+                if 0 <= screenshot_x <= self.pixel_width and 0 <= screenshot_y <= self.pixel_height:
+                    # Scale from screenshot space to logical space and move
+                    move_x, move_y = self._scale_coordinates_for_click(screenshot_x, screenshot_y)
 
                     if self.verbose:
-                        print(f"  Moving to: ({x}, {y}) -> ({move_x}, {move_y})")
+                        print(f"  Move coordinates: ({move_x}, {move_y})")
 
                     self._execute_mouse_move(move_x, move_y)
 
                     return {
                         "success": True,
                         "action": "mouse_move",
-                        "coordinate": [x, y],
-                        "scaled_coordinate": [move_x, move_y],
+                        "claude_coordinate": [claude_x, claude_y],
+                        "screenshot_coordinate": [screenshot_x, screenshot_y],
+                        "move_coordinate": [move_x, move_y],
                         "element": element_text
                     }
                 else:
                     return {
                         "success": False,
-                        "error": f"Coordinates ({x}, {y}) out of bounds"
+                        "error": f"Coordinates ({screenshot_x}, {screenshot_y}) out of bounds"
                     }
             else:
                 return {
@@ -849,21 +976,26 @@ If you cannot find an OPEN button on the same horizontal line, respond with: NOT
             coord_match = re.search(r'COORDINATES:\s*\((\d+),\s*(\d+)\)', response_text)
 
             if coord_match:
-                open_x = int(coord_match.group(1))
-                open_y = int(coord_match.group(2))
+                # These are Claude Vision coordinates (in scaled-down image space)
+                claude_x = int(coord_match.group(1))
+                claude_y = int(coord_match.group(2))
+
+                # Scale from Claude Vision space to screenshot space
+                screenshot_x, screenshot_y = self._scale_claude_vision_coordinates(claude_x, claude_y)
 
                 # Validate coordinates
-                if 0 <= open_x <= self.display_width and 0 <= open_y <= self.display_height:
+                if 0 <= screenshot_x <= self.pixel_width and 0 <= screenshot_y <= self.pixel_height:
                     return {
                         "success": True,
-                        "open_button_coords": (open_x, open_y),
+                        "open_button_coords": (screenshot_x, screenshot_y),
+                        "claude_coords": (claude_x, claude_y),
                         "recipe_coords": recipe_coords,
                         "recipe_name": recipe_name
                     }
                 else:
                     return {
                         "success": False,
-                        "error": f"Open button coordinates ({open_x}, {open_y}) out of bounds"
+                        "error": f"Open button coordinates ({screenshot_x}, {screenshot_y}) out of bounds"
                     }
             else:
                 return {

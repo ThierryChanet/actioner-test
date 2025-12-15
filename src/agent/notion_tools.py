@@ -11,7 +11,7 @@ when working with Notion.
 
 import json
 import time
-from typing import Optional, Type
+from typing import Optional, Type, List
 from pydantic import BaseModel, Field
 from langchain.tools import BaseTool
 
@@ -216,16 +216,24 @@ If not found: NOT_FOUND"""
                 }, indent=2)
 
             else:
-                # OPEN button not found - maybe page is already open or different UI
-                # Try clicking the page name directly as fallback
-                show_progress("OPEN button not found, clicking page name directly...")
+                # OPEN button not found - do not click recipe name
+                # Instead, ensure side panel is closed by pressing Escape
+                show_progress("OPEN button not found, ensuring side panel is closed...")
+                
+                # Press Escape to close any open side panel
+                self.client.execute_action("key", text="Escape")
+                time.sleep(0.5)
+                
+                # Press Escape again to ensure panel is closed
+                self.client.execute_action("key", text="Escape")
+                time.sleep(0.5)
 
                 return json.dumps({
-                    "status": "partial_success",
+                    "status": "error",
                     "page_name": page_name,
                     "coordinates": coords,
-                    "message": f"Clicked '{page_name}' but could not find OPEN button. Page may be open or UI differs.",
-                    "note": "Try using extract_page_content to verify page state"
+                    "message": f"Could not find OPEN button for '{page_name}'. Did not click recipe name. Pressed Escape to ensure side panel is closed.",
+                    "note": "The OPEN button may not be visible, or the page may already be open. Try using extract_page_content to verify page state."
                 }, indent=2)
 
         except Exception as e:
@@ -677,6 +685,156 @@ Return ONLY valid JSON, no markdown formatting."""
             }, indent=2)
 
 
+class NotionExtractRecipesSequentiallyInput(BaseModel):
+    """Input for sequential recipe extraction tool."""
+    recipe_names: List[str] = Field(
+        description="List of recipe names to extract sequentially (e.g., ['Velouté Potimarron', 'Recipe 2'])"
+    )
+    focus_area: Optional[str] = Field(
+        default=None,
+        description="Optional hint about what to focus on during extraction (e.g., 'ingredients', 'main content')"
+    )
+
+
+class NotionExtractRecipesSequentiallyTool(BaseTool):
+    """Tool for extracting multiple recipes sequentially with proper panel management.
+
+    This tool implements a complete workflow for extracting recipes one by one:
+    1. For each recipe:
+       - Opens the recipe using the OPEN button (handles hover and button detection)
+       - Extracts content using vision analysis
+       - Closes the panel before moving to the next recipe
+    2. Returns all extracted data in a structured format
+
+    This ensures proper panel management and prevents UI state issues when
+    extracting multiple recipes from a database.
+    """
+
+    name: str = "notion_extract_recipes_sequentially"
+    description: str = (
+        "Extract multiple recipes from a Notion database sequentially. "
+        "This tool opens each recipe using the OPEN button, extracts content with vision, "
+        "and closes the panel before opening the next recipe. "
+        "Use this when you need to extract multiple recipes and ensure proper panel management. "
+        "Provide a list of recipe names to extract. "
+        "Example: ['Velouté Potimarron', 'Recipe 2', 'Recipe 3']. "
+        "Returns structured data for all recipes including titles, sections, lists, and properties."
+    )
+    args_schema: Type[BaseModel] = NotionExtractRecipesSequentiallyInput
+
+    client: object = Field(exclude=True)
+    state: AgentState = Field(exclude=True)
+
+    def _run(self, recipe_names: List[str], focus_area: Optional[str] = None) -> str:
+        """Extract recipes sequentially with proper panel management."""
+        if not recipe_names:
+            return json.dumps({
+                "status": "error",
+                "message": "No recipe names provided"
+            }, indent=2)
+
+        show_progress(f"Starting sequential extraction of {len(recipe_names)} recipes...")
+
+        # Initialize tools
+        open_tool = NotionOpenPageTool(client=self.client, state=self.state)
+        extract_tool = NotionVisionExtractTool(client=self.client, state=self.state)
+        close_tool = NotionClosePageTool(client=self.client, state=self.state)
+
+        results = []
+        successful = 0
+        failed = 0
+
+        for idx, recipe_name in enumerate(recipe_names, 1):
+            show_progress(f"[{idx}/{len(recipe_names)}] Processing: {recipe_name}")
+
+            recipe_result = {
+                "recipe_name": recipe_name,
+                "index": idx,
+                "status": "unknown",
+                "data": None,
+                "error": None
+            }
+
+            try:
+                # Step 1: Open the recipe page
+                show_progress(f"  Opening '{recipe_name}'...")
+                open_result_str = open_tool._run(recipe_name)
+                open_result = json.loads(open_result_str)
+
+                if open_result.get("status") != "success":
+                    # OPEN button not found - panel should be closed already
+                    recipe_result["status"] = "failed"
+                    recipe_result["error"] = open_result.get("message", "Failed to open recipe")
+                    failed += 1
+                    results.append(recipe_result)
+                    show_progress(f"  ⚠️  Could not open '{recipe_name}': {recipe_result['error']}")
+                    continue
+
+                # Step 2: Wait for panel to fully load
+                time.sleep(1.5)
+
+                # Step 3: Extract content using vision
+                show_progress(f"  Extracting content from '{recipe_name}'...")
+                extract_result_str = extract_tool._run(focus_area)
+                extract_result = json.loads(extract_result_str)
+
+                if extract_result.get("status") == "success":
+                    recipe_result["status"] = "success"
+                    recipe_result["data"] = extract_result.get("data", {})
+                    successful += 1
+                    show_progress(f"  ✅ Successfully extracted '{recipe_name}'")
+                else:
+                    recipe_result["status"] = "partial"
+                    recipe_result["data"] = extract_result.get("raw_response")
+                    recipe_result["error"] = extract_result.get("message", "Extraction had issues")
+                    show_progress(f"  ⚠️  Partial extraction for '{recipe_name}'")
+
+                # Step 4: Close the panel before moving to next recipe
+                show_progress(f"  Closing panel for '{recipe_name}'...")
+                close_result_str = close_tool._run()
+                close_result = json.loads(close_result_str)
+
+                if close_result.get("status") != "success":
+                    show_progress(f"  ⚠️  Panel close verification failed, but continuing...")
+                    # Press Escape again to ensure panel is closed
+                    self.client.execute_action("key", text="Escape")
+                    time.sleep(0.5)
+
+                # Wait a bit before next recipe
+                time.sleep(0.5)
+
+            except Exception as e:
+                recipe_result["status"] = "error"
+                recipe_result["error"] = str(e)
+                failed += 1
+                show_progress(f"  ❌ Error processing '{recipe_name}': {e}")
+
+                # Try to close panel even on error
+                try:
+                    self.client.execute_action("key", text="Escape")
+                    time.sleep(0.5)
+                    self.client.execute_action("key", text="Escape")
+                    time.sleep(0.5)
+                except:
+                    pass
+
+            results.append(recipe_result)
+
+        # Summary
+        summary = {
+            "total": len(recipe_names),
+            "successful": successful,
+            "failed": failed,
+            "partial": len([r for r in results if r["status"] == "partial"])
+        }
+
+        return json.dumps({
+            "status": "completed",
+            "summary": summary,
+            "recipes": results
+        }, indent=2)
+
+
 def get_notion_tools(client: object, state: AgentState) -> list:
     """Get Notion-specific tools.
 
@@ -695,4 +853,5 @@ def get_notion_tools(client: object, state: AgentState) -> list:
         NotionOpenPageTool(client=client, state=state),
         NotionClosePageTool(client=client, state=state),
         NotionVisionExtractTool(client=client, state=state),
+        NotionExtractRecipesSequentiallyTool(client=client, state=state),
     ]
